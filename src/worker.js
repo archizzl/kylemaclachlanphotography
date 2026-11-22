@@ -11,15 +11,16 @@
  *   /embed.js                   (static, in ./public) the one-line embed
  *   /<user>/posts.json          recent posts      /<user>/<slug>.json  one post
  *   /<user>/feed.xml            RSS               /<user>/feed.json    JSON Feed
+ *   /<user>/images/<file>.json  one image with its alt text and caption
  */
 
 import {
   adminCookie, checkPassword, clearAdminCookie, clearFails, currentUser, endAllSessions, endSession,
   generatePassword, hashPassword, isAdmin, lockedOut, passwordProblem, recordFail, same, startSession,
 } from "./auth.js";
-import { renderMarkdown } from "./markdown.js";
-import { cacheControlFor, checkUpload, cleanPost, cleanSettings, contentMatches, isImage, usernameProblem } from "./rules.js";
-import { jsonFeed, postMarkdownFile, postMdKey, publicPost, publicUser, rssFeed } from "./feeds.js";
+import { renderInline, renderMarkdown } from "./markdown.js";
+import { cacheControlFor, checkUpload, cleanFileText, cleanPost, cleanSettings, contentMatches, isImage, usernameProblem } from "./rules.js";
+import { jsonFeed, postMarkdownFile, postMdKey, publicImage, publicPost, publicUser, rssFeed } from "./feeds.js";
 import { adminLoginPage, adminPage, dashboardPage, loginPage, simplePage } from "./pages.js";
 import { html, json, now, readJson, redirect } from "./util.js";
 
@@ -84,7 +85,9 @@ async function route(request, env, ctx) {
   // ---- what other sites read ----
   const pub = path.match(/^\/([a-z0-9-]{2,30})\/([a-z0-9-]{1,80})\.(json|xml)$/);
   if (pub && (method === "GET" || method === "HEAD")) return cachedPublic(request, ctx, () => publicRoute(pub[1], pub[2], pub[3], env, url));
-  if (method === "OPTIONS" && pub) return new Response(null, { status: 204, headers: CORS });
+  const img = path.match(/^\/([a-z0-9-]{2,30})\/images\/([a-z0-9._-]{1,100})\.json$/);
+  if (img && (method === "GET" || method === "HEAD")) return cachedPublic(request, ctx, () => publicImageRoute(img[1], img[2], env));
+  if (method === "OPTIONS" && (pub || img)) return new Response(null, { status: 204, headers: CORS });
 
   return env.ASSETS ? env.ASSETS.fetch(request) : new Response("Not found", { status: 404 });
 }
@@ -259,9 +262,14 @@ async function api(path, method, request, env, user, url) {
   }
   if (path === "/api/files" && method === "PUT") return upload(request, env, user, url);
   const fm = path.match(/^\/api\/files\/(\d+)$/);
-  if (fm && method === "DELETE") {
+  if (fm && (method === "DELETE" || method === "PUT")) {
     const file = await env.DB.prepare("SELECT * FROM files WHERE id = ? AND user_id = ?").bind(Number(fm[1]), user.id).first();
     if (!file) return json({ error: "That file isn't there any more." }, 404);
+    if (method === "PUT") {
+      const t = cleanFileText(await readJson(request));
+      await env.DB.prepare("UPDATE files SET alt = ?, caption = ? WHERE id = ?").bind(t.alt, t.caption, file.id).run();
+      return json({ file: { ...file, ...t, url: `${base}/${file.key}` } });
+    }
     await env.FILES.delete(file.key);
     await env.DB.prepare("DELETE FROM files WHERE id = ?").bind(file.id).run();
     return json({ ok: true });
@@ -393,6 +401,17 @@ async function publicRoute(username, name, ext, env, url) {
   const post = await env.DB.prepare("SELECT * FROM posts WHERE user_id = ? AND slug = ? AND published = 1").bind(user.id, name).first();
   if (!post) return notFound();
   return json({ user: publicUser(user), post: publicPost(user, post, base) }, 200, headers);
+}
+
+async function publicImageRoute(username, name, env) {
+  const headers = { ...CORS, "cache-control": `public, max-age=${PUBLIC_CACHE_SECONDS}`, "x-content-type-options": "nosniff" };
+  const file = await env.DB.prepare(
+    "SELECT f.* FROM files f JOIN users u ON u.id = f.user_id WHERE u.username = ? AND u.disabled = 0 AND f.key = ?"
+  )
+    .bind(username, `${username}/${name}`)
+    .first();
+  if (!file || !isImage(file.content_type)) return json({ error: "Not found." }, 404, { ...CORS, "cache-control": "public, max-age=30" });
+  return json({ image: publicImage(file, cdnBase(env), renderInline(file.caption)) }, 200, headers);
 }
 
 // ---- local stand-in for the CDN ----

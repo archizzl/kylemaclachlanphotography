@@ -49,17 +49,33 @@ function postSnippet(post) {
 }
 const listSnippet = (n = 10) => `<script src="${embedOrigin}/embed.js" data-user="${username}" data-list="${n}" async></script>`;
 
-function showSnippet(title, snippet, extra = "") {
+function imageSnippet(f) {
+  return `<script src="${embedOrigin}/embed.js" data-user="${username}" data-image="${f.name}" async></script>
+<noscript><img src="${f.url}" alt="${esc(f.alt || "")}"></noscript>`;
+}
+const imgTag = f =>
+  `<img src="${f.url}" alt="${esc(f.alt || "")}"${f.width ? ` width="${f.width}" height="${f.height}"` : ""} style="max-width:100%;height:auto">`;
+
+// choices: one embed code, or a list of { label, code, note } to pick from.
+function showSnippet(title, choices, extra = "") {
+  const list = typeof choices === "string" ? [{ code: choices }] : choices;
   const d = document.createElement("dialog");
   d.innerHTML = `<h2>${esc(title)}</h2>
-    <p class="muted">paste this into your page wherever the writing should show up. it updates by itself when you edit here.</p>
-    <textarea readonly>${esc(snippet)}</textarea>
+    ${list.length === 1 ? `<p class="muted">paste this into your page wherever it should show up. it updates by itself when you edit here.</p>` : ""}
+    ${list
+      .map(
+        (c, i) => `${c.label ? `<h3 style="margin:14px 0 2px;font-size:1em">${esc(c.label)}</h3>` : ""}
+      ${c.note ? `<p class="muted" style="margin:0 0 4px">${c.note}</p>` : ""}
+      <textarea readonly>${esc(c.code)}</textarea>
+      <div class="toolbar"><button class="${i === 0 ? "primary" : ""}" data-copy-snippet="${i}">copy</button></div>`
+      )
+      .join("")}
     ${extra}
-    <div class="toolbar"><button class="primary" data-act="copy">copy</button><button data-act="close">close</button></div>`;
+    <div class="toolbar"><button data-act="close">close</button></div>`;
   d.addEventListener("click", ev => {
-    const act = ev.target.dataset.act;
-    if (act === "copy") copy(snippet, "embed code copied");
-    if (act === "close" || ev.target === d) d.close();
+    const i = ev.target.dataset.copySnippet;
+    if (i !== undefined) copy(list[i].code, "embed code copied");
+    if (ev.target.dataset.act === "close" || ev.target === d) d.close();
   });
   d.addEventListener("close", () => d.remove());
   document.body.append(d);
@@ -280,10 +296,11 @@ async function filesView() {
       return `<li>
         ${img ? `<img class="thumb" src="${esc(f.url)}" alt="" loading="lazy">` : `<div class="thumb doc">${esc(f.name.split(".").pop())}</div>`}
         <div class="grow"><a class="filename" href="${esc(f.url)}" target="_blank">${esc(f.name)}</a>
-          <div class="muted">${kb(f.size)}${f.width ? ` · ${f.width}×${f.height}` : ""}</div></div>
+          <div class="muted">${kb(f.size)}${f.width ? ` · ${f.width}×${f.height}` : ""}</div>
+          ${img ? `<div class="muted">${f.alt ? `alt: ${esc(f.alt)}` : `<span class="problem">no description yet</span>`}${f.caption ? `<br>caption: ${esc(f.caption)}` : ""}</div>` : ""}</div>
         <div class="buttons">
+          ${img ? `<button data-describe="${f.id}">describe</button><button data-embed="${f.id}">embed code</button>` : ""}
           <button data-copy="${f.id}">copy link</button>
-          ${img ? `<button data-tag="${f.id}">copy &lt;img&gt;</button>` : ""}
           <button class="danger" data-del="${f.id}">delete</button>
         </div></li>`;
     })
@@ -329,15 +346,49 @@ async function filesView() {
 
   app.onclick = async ev => {
     const t = ev.target;
-    const f = files.find(x => x.id == (t.dataset.copy || t.dataset.tag || t.dataset.del));
+    const f = files.find(x => x.id == (t.dataset.copy || t.dataset.embed || t.dataset.describe || t.dataset.del));
     if (!f) return;
     if (t.dataset.copy) copy(f.url, "link copied");
-    if (t.dataset.tag) copy(`<img src="${f.url}" alt=""${f.width ? ` width="${f.width}" height="${f.height}"` : ""} style="max-width:100%;height:auto">`, "<img> tag copied");
+    if (t.dataset.describe) describe(f);
+    if (t.dataset.embed) {
+      showSnippet(`embed ${f.name}`, [
+        {
+          label: "embed (recommended)",
+          code: imageSnippet(f),
+          note: "shows the photo with its description and caption. change those here and every page updates.",
+        },
+        { label: "plain image", code: imgTag(f), note: "for sites that don't allow &lt;script&gt; tags. the description is copied in now and won't update." },
+      ]);
+    }
     if (t.dataset.del) {
       if (!confirm(`Delete ${f.name}? Any page or post that shows it will have a broken image. Copies cached around the web can take a little while to disappear.`)) return;
       try { await api(`files/${f.id}`, { method: "DELETE" }); toast("deleted"); filesView(); } catch (err) { toast(err.message, true); }
     }
   };
+}
+
+// Alt text (read aloud to people who can't see the photo) and an optional caption.
+function describe(f) {
+  const d = document.createElement("dialog");
+  d.innerHTML = `<h2>describe ${esc(f.name)}</h2>
+    <img src="${esc(f.url)}" alt="" style="max-width:100%;max-height:220px;display:block;margin-bottom:10px">
+    <form method="dialog" class="stack">
+      <label>description <span class="muted">(alt text: what's in the photo, for people who can't see it)</span>
+        <input name="alt" value="${esc(f.alt || "")}" placeholder="my dog asleep on a beach towel"></label>
+      <label>caption <span class="muted">(optional, shown under the photo. **bold**, *italics* and [links](https://…) work)</span>
+        <input name="caption" value="${esc(f.caption || "")}"></label>
+      <div class="toolbar"><button class="primary" value="save">save</button><button value="cancel" formnovalidate>cancel</button></div>
+    </form>`;
+  d.addEventListener("close", async () => {
+    const form = d.querySelector("form");
+    const save = d.returnValue === "save";
+    const body = { alt: form.alt.value, caption: form.caption.value };
+    d.remove();
+    if (!save) return;
+    try { await api(`files/${f.id}`, { method: "PUT", body }); toast("saved. embeds update within a minute."); filesView(); } catch (err) { toast(err.message, true); }
+  });
+  document.body.append(d);
+  d.showModal();
 }
 
 // ---- settings ----
@@ -357,7 +408,23 @@ function settingsView() {
     <h2>embedding</h2>
     <p>every published post has an "embed code" button on the posts page. to show your latest posts in one go:</p>
     <p><code>${esc(listSnippet(10))}</code> <button data-act="copylist">copy</button></p>
-    <p class="muted">add <code>data-style="none"</code> to use only your page's own styles, or <code>data-title="no"</code> to leave titles out.</p>
+    <p>photos have their own "embed code" button on the files page.</p>
+
+    <h2>styling</h2>
+    <p>embeds aren't boxed in: posts and photos go straight into your page, so they pick up your page's fonts, colors and sizes. to change how they look, add css to your own site using these classes:</p>
+    <textarea readonly style="width:100%;min-height:320px">/* a post (or each post in a list) */
+.kmp-post { }
+.kmp-title { }          /* the post's title */
+.kmp-date { }           /* the date under it */
+.kmp-body { }           /* the writing itself */
+.kmp-body img { }       /* photos inside posts */
+.kmp-body a { }
+
+/* a photo embed */
+.kmp-image { }          /* the whole thing (a &lt;figure&gt;) */
+.kmp-image img { }
+.kmp-image figcaption { }</textarea>
+    <p class="muted">the embed adds a few light defaults (photos fit the page, dates are a bit faded). your css always wins over them. to switch them off completely, add <code>data-style="none"</code> to the script tag. <code>data-title="no"</code> leaves post titles out and <code>data-caption="no"</code> leaves photo captions out.</p>
     <p>feeds for readers: <a href="${esc(me.feeds.rss)}" target="_blank">rss</a> · <a href="${esc(me.feeds.json)}" target="_blank">json feed</a></p>
 
     <h2>change your password</h2>

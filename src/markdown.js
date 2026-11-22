@@ -27,6 +27,11 @@ export function renderMarkdown(text) {
   return md.render(String(text || ""));
 }
 
+// One line of markdown (bold, italics, links) with no paragraph around it, for captions.
+export function renderInline(text) {
+  return md.renderInline(String(text || ""));
+}
+
 // Plain-text opening of a post, for feed summaries.
 export function excerpt(text, max = 200) {
   const plain = String(text || "")

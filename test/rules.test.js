@@ -3,7 +3,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { renderMarkdown, excerpt } from "../src/markdown.js";
-import { checkUpload, cleanPost, cleanSettings, contentMatches, safeFileName, slugify, usernameProblem } from "../src/rules.js";
+import { checkUpload, cleanFileText, cleanPost, cleanSettings, contentMatches, safeFileName, slugify, usernameProblem } from "../src/rules.js";
 import { checkPassword, generatePassword, hashPassword, passwordProblem } from "../src/auth.js";
 import { jsonFeed, rssFeed } from "../src/feeds.js";
 
@@ -118,4 +118,9 @@ test("feeds have the right shape and escape their contents", () => {
   assert.equal(jf.items[0].content_html, "<p>hello</p>");
   // Without a pattern, links go to the post's .md file.
   assert.equal(jsonFeed({ ...user, post_url_pattern: "" }, posts, opts).items[0].url, "https://cdn.kmp.test/maya/posts/hi.md");
+});
+
+test("alt text and captions are trimmed to one line", () => {
+  assert.deepEqual(cleanFileText({ alt: " a\n dog ", caption: "x".repeat(2000) }), { alt: "a dog", caption: "x".repeat(1000) });
+  assert.deepEqual(cleanFileText(null), { alt: "", caption: "" });
 });

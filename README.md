@@ -8,7 +8,7 @@ One Cloudflare Worker (`blog-cdn`) on the Reaction Future Institute account, plu
 
 - **Friends** log in at `/login` and use the dashboard at `/dashboard` (`public/app/app.js`):
   - **posts**: a markdown editor with a live preview, an "insert photo" button, and save draft, publish or unpublish.
-  - **files**: drag-and-drop upload, copy link, copy `<img>`, delete. You can also import a `.md` or `.txt` file as a draft post.
+  - **files**: drag-and-drop upload, copy link and delete. Photos also get **describe** (alt text and an optional caption) and **embed code** (a live embed, or a plain `<img>` for sites that block scripts). You can also import a `.md` or `.txt` file as a draft post.
   - **settings**: name, site address, an optional post address pattern (used for feed links), and change password.
 - **Archie** manages friends at `/admin`, using the `ADMIN_PASSWORD` Worker secret. From there he can add a friend (a password is made up if left blank and shown once), reset a password (which logs them out everywhere), and switch an account off or back on.
 - **Posts** are stored in D1 (`migrations/`). The markdown is rendered to HTML when saved (`src/markdown.js`, markdown-it with HTML turned off, so anything typed as HTML shows as text). Each published post is also copied to R2 as `<user>/posts/<slug>.md`.
@@ -20,8 +20,14 @@ One Cloudflare Worker (`blog-cdn`) on the Reaction Future Institute account, plu
   ```html
   <script src="https://kylemaclachlanphotography.org/embed.js" data-user="maya" data-post="my-post" async></script>
   <script src="https://kylemaclachlanphotography.org/embed.js" data-user="maya" data-list="10" async></script>
+  <script src="https://kylemaclachlanphotography.org/embed.js" data-user="maya" data-image="beach.jpg" async></script>
   ```
-  Options: `data-style="none"` and `data-title="no"`. The script reads `/<user>/<slug>.json` or `/<user>/posts.json`. These are public, open to any site (CORS `*`) and cached for 60 seconds, so edits show up within a minute.
+  Options: `data-style="none"`, `data-title="no"` and `data-caption="no"`. The script reads `/<user>/<slug>.json`, `/<user>/posts.json` or `/<user>/images/<file>.json`. These are public, open to any site (CORS `*`) and cached for 60 seconds, so edits show up within a minute.
+- **Styling** is done on the friend's site, not here.
+  - Embeds are plain HTML inserted into their page (no iframe), so the page's own fonts and colors apply.
+  - Friends can style these classes: `.kmp-post`, `.kmp-title`, `.kmp-date`, `.kmp-body`, `.kmp-image`, `.kmp-image img` and `.kmp-image figcaption`.
+  - embed.js adds a few defaults. They use `:where()`, so they have no specificity, and they go first in `<head>`, so any rule the page writes wins.
+  - The settings page lists the classes for friends.
 - **Feeds**: `/<user>/feed.xml` (RSS) and `/<user>/feed.json` (JSON Feed).
 - **Logins**:
   - Friends' passwords are stored as PBKDF2 hashes. Sessions last 30 days and are stored in D1.

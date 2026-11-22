@@ -1,12 +1,18 @@
 /*
- * Shows a friend's posts on any web page.
+ * Shows a friend's posts or photos on any web page.
  *
  *   <script src="https://kylemaclachlanphotography.org/embed.js" data-user="maya" data-post="my-post" async></script>
  *   <script src="https://kylemaclachlanphotography.org/embed.js" data-user="maya" data-list="10" async></script>
+ *   <script src="https://kylemaclachlanphotography.org/embed.js" data-user="maya" data-image="beach.jpg" async></script>
  *
- * Options: data-style="none" (no styling of its own), data-title="no" (leave titles out).
- * The posts appear right where the <script> tag is. The post HTML comes from the server, which
- * escapes anything typed as HTML, so it's safe to insert.
+ * Options: data-style="none" (no styling of its own), data-title="no" (leave post titles out),
+ * data-caption="no" (leave an image's caption out).
+ *
+ * Everything is inserted as plain HTML right where the <script> tag is (no iframe), so the page's
+ * own CSS applies. The few default styles below have zero specificity (:where), and go first in
+ * <head>, so any rule the page writes for the kmp-* classes wins.
+ *
+ * The HTML comes from the server, which escapes anything typed as HTML, so it's safe to insert.
  */
 (function () {
   "use strict";
@@ -16,13 +22,17 @@
     var s = document.createElement("style");
     s.id = "kmp-embed-style";
     s.textContent =
-      ".kmp-post{margin:0 0 2.5em}" +
-      ".kmp-post img{max-width:100%;height:auto}" +
-      ".kmp-post pre{overflow:auto}" +
-      ".kmp-post blockquote{margin-left:0;padding-left:1em;border-left:2px solid currentColor;opacity:.85}" +
-      ".kmp-date{display:block;opacity:.6;font-size:.85em;margin:-.4em 0 1em}" +
-      ".kmp-error{opacity:.6;font-style:italic}";
-    (document.head || document.documentElement).appendChild(s);
+      ":where(.kmp-post){display:block;margin:0 0 2.5em}" +
+      ":where(.kmp-post, .kmp-image) img{max-width:100%;height:auto}" +
+      ":where(.kmp-post) pre{overflow:auto}" +
+      ":where(.kmp-post) blockquote{margin-left:0;padding-left:1em;border-left:2px solid currentColor;opacity:.85}" +
+      ":where(.kmp-date){display:block;opacity:.6;font-size:.85em;margin:-.4em 0 1em}" +
+      ":where(.kmp-image){margin:1em 0}" +
+      ":where(.kmp-image) img{display:block}" +
+      ":where(.kmp-image figcaption){opacity:.7;font-size:.85em;margin-top:.4em}" +
+      ":where(.kmp-error){opacity:.6;font-style:italic}";
+    var head = document.head || document.documentElement;
+    head.insertBefore(s, head.firstChild);
   }
 
   function el(tag, cls, text) {
@@ -60,22 +70,48 @@
     return a;
   }
 
+  function figure(image, opts) {
+    var f = el("figure", "kmp-image");
+    var img = document.createElement("img");
+    img.src = image.url;
+    img.alt = image.alt || "";
+    img.loading = "lazy";
+    if (image.width && image.height) {
+      img.width = image.width;
+      img.height = image.height;
+    }
+    f.appendChild(img);
+    if (opts.captions && image.caption_html) {
+      var cap = el("figcaption");
+      cap.innerHTML = image.caption_html;
+      f.appendChild(cap);
+    }
+    return f;
+  }
+
   function run(script) {
     script.setAttribute("data-kmp-done", "1");
     var user = script.getAttribute("data-user");
     var slug = script.getAttribute("data-post");
+    var image = script.getAttribute("data-image");
     var list = script.getAttribute("data-list");
-    var opts = { titles: script.getAttribute("data-title") !== "no", list: !slug };
+    var opts = {
+      titles: script.getAttribute("data-title") !== "no",
+      captions: script.getAttribute("data-caption") !== "no",
+      list: !slug && !image,
+    };
     if (!user) return;
     if (script.getAttribute("data-style") !== "none") css();
 
     var box = el("div", "kmp-embed");
     script.parentNode.insertBefore(box, script.nextSibling);
 
-    var origin = new URL(script.src, location.href).origin;
-    var url = slug
-      ? origin + "/" + encodeURIComponent(user) + "/" + encodeURIComponent(slug) + ".json"
-      : origin + "/" + encodeURIComponent(user) + "/posts.json?limit=" + (parseInt(list, 10) || 10);
+    var base = new URL(script.src, location.href).origin + "/" + encodeURIComponent(user) + "/";
+    var url = image
+      ? base + "images/" + encodeURIComponent(image) + ".json"
+      : slug
+        ? base + encodeURIComponent(slug) + ".json"
+        : base + "posts.json?limit=" + (parseInt(list, 10) || 10);
 
     fetch(url)
       .then(function (r) {
@@ -83,13 +119,14 @@
         return r.json();
       })
       .then(function (data) {
+        if (data.image) return box.appendChild(figure(data.image, opts));
         var posts = data.post ? [data.post] : data.posts || [];
         posts.forEach(function (p) {
           box.appendChild(article(p, opts));
         });
       })
       .catch(function () {
-        box.appendChild(el("p", "kmp-error", slug ? "this post couldn't be loaded." : "posts couldn't be loaded."));
+        box.appendChild(el("p", "kmp-error", image ? "this photo couldn't be loaded." : slug ? "this post couldn't be loaded." : "posts couldn't be loaded."));
       });
   }
 

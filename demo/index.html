@@ -11,7 +11,8 @@
 </head>
 <body>
 <!-- A stand-in for a friend's own site, on a different origin from the blog server.
-     Run with the blog-cdn-demo launch config (port 8128); open ?user=<name>&post=<slug>. -->
+     Run with the blog-cdn-demo launch config (port 8128); open ?user=<name>&post=<slug>,
+     ?user=<name>&list=5 or ?user=<name>&image=<file name>. -->
 <header><h1>a friend's site</h1></header>
 <div id="slot"></div>
 <script>
@@ -19,7 +20,8 @@
   const s = document.createElement("script");
   s.src = (q.get("server") || "http://localhost:8127") + "/embed.js";
   s.dataset.user = q.get("user") || "test";
-  if (q.get("post")) s.dataset.post = q.get("post");
+  if (q.get("image")) s.dataset.image = q.get("image");
+  else if (q.get("post")) s.dataset.post = q.get("post");
   else s.dataset.list = q.get("list") || "10";
   document.getElementById("slot").append(s);
 </script>

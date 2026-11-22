@@ -3,7 +3,7 @@
 
 import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { getPlatformProxy } from "wrangler";
 import worker from "../src/worker.js";
 
@@ -14,12 +14,11 @@ let proxy, env;
 before(async () => {
   proxy = await getPlatformProxy({ persist: false, environment: undefined });
   env = { ...proxy.env, ADMIN_PASSWORD: "admin-secret-pw", CDN_BASE: CDN, ASSETS: undefined };
-  const sql = readFileSync(new URL("../migrations/0001_init.sql", import.meta.url), "utf8")
-    .replace(/--.*$/gm, "")
-    .split(";")
-    .map(s => s.trim())
-    .filter(Boolean);
-  for (const s of sql) await env.DB.prepare(s).run();
+  const dir = new URL("../migrations/", import.meta.url);
+  for (const name of readdirSync(dir).filter(n => n.endsWith(".sql")).sort()) {
+    const sql = readFileSync(new URL(name, dir), "utf8").replace(/--.*$/gm, "").split(";").map(s => s.trim()).filter(Boolean);
+    for (const s of sql) await env.DB.prepare(s).run();
+  }
 });
 after(() => proxy?.dispose());
 
@@ -179,6 +178,33 @@ test("uploads: photos go to R2 under the friend's name; fakes and SVGs are refus
   assert.equal(await env.FILES.get("maya/beach-day.jpg"), null);
 });
 
+test("photos can be described and embedded on their own", async () => {
+  const maya = await loggedInMaya();
+  const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+  const res = await maya("/api/files?name=Dog.png", { method: "PUT", raw: png, headers: { "content-type": "image/png", "content-length": "8", "x-width": "640", "x-height": "480" } });
+  const file = (await res.json()).file;
+  assert.equal(file.name, "dog.png");
+
+  // Before describing: the embed works with an empty description.
+  let data = await (await maya("/maya/images/dog.png.json?v1")).json();
+  assert.deepEqual(data.image, { name: "dog.png", url: `${CDN}/maya/dog.png`, alt: "", caption_html: "", width: 640, height: 480 });
+
+  const saved = await maya(`/api/files/${file.id}`, { method: "PUT", body: { alt: "  my dog\n asleep ", caption: "Rex, **snoring** <script>x</script> [more](javascript:alert(1))" } });
+  assert.equal((await saved.json()).file.alt, "my dog asleep");
+  const r = await maya("/maya/images/dog.png.json?v2");
+  assert.equal(r.headers.get("access-control-allow-origin"), "*");
+  data = await r.json();
+  assert.equal(data.image.alt, "my dog asleep");
+  assert.match(data.image.caption_html, /^Rex, <strong>snoring<\/strong> &lt;script&gt;x&lt;\/script&gt;/);
+  assert.ok(!data.image.caption_html.includes("<a"));
+
+  // Not images, other people's names and missing files are 404s.
+  await maya("/api/files?name=notes.txt", { method: "PUT", raw: new TextEncoder().encode("hi"), headers: { "content-type": "text/plain", "content-length": "2" } });
+  assert.equal((await maya("/maya/images/notes.txt.json")).status, 404);
+  assert.equal((await maya("/sam/images/dog.png.json")).status, 404);
+  assert.equal((await maya("/maya/images/nope.png.json")).status, 404);
+});
+
 test("friends can't touch each other's posts or files", async () => {
   await archie("/admin/users", { method: "POST", form: { username: "sam", password: "sam-password-1" } });
   const sam = browser("5.5.5.5");
@@ -189,6 +215,9 @@ test("friends can't touch each other's posts or files", async () => {
   assert.equal((await sam(`/api/posts/${mine.id}`, { method: "DELETE" })).status, 404);
   assert.equal((await sam("/api/posts")).status, 200);
   assert.ok(!(await (await sam("/api/posts")).json()).posts.some(p => p.title === "Mine"));
+  const dog = await env.DB.prepare("SELECT id FROM files WHERE key = 'maya/dog.png'").first();
+  assert.equal((await sam(`/api/files/${dog.id}`, { method: "PUT", body: { alt: "hacked" } })).status, 404);
+  assert.equal((await sam(`/api/files/${dog.id}`, { method: "DELETE" })).status, 404);
 });
 
 test("changing a password logs out other devices; resetting logs out everywhere", async () => {

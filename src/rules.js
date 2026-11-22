@@ -124,3 +124,9 @@ export function contentMatches(type, bytes) {
 }
 
 export const isImage = type => type.startsWith("image/");
+
+// Alt text describes an image for people who can't see it; the caption shows under it.
+export function cleanFileText(input) {
+  const oneLine = (v, max) => String(v || "").replace(/\s+/g, " ").trim().slice(0, max);
+  return { alt: oneLine(input?.alt, 500), caption: oneLine(input?.caption, 1000) };
+}

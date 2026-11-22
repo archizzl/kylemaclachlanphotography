@@ -34,6 +34,17 @@ export function publicPost(user, post, cdnBase) {
   };
 }
 
+export function publicImage(file, cdnBase, captionHtml) {
+  return {
+    name: file.name,
+    url: `${cdnBase}/${file.key}`,
+    alt: file.alt || "",
+    caption_html: captionHtml || "",
+    width: file.width || null,
+    height: file.height || null,
+  };
+}
+
 const rfc822 = date => new Date(`${date}T12:00:00Z`).toUTCString();
 
 export function rssFeed(user, posts, { origin, cdnBase }) {
