@@ -9,7 +9,9 @@
  *   data-filter="emotion:tender"   only posts with that value (several: separate with commas)
  *   data-sort="number"             sort by a field, or "date" for oldest first; "-number" reverses
  *   data-group="emotion"           a heading for each value, with its posts under it
- *   data-menu="emotion"            buttons readers click to show one value at a time
+ *   data-menu="emotion"            buttons readers click to show one value at a time; the post's own
+ *                                  tags for that field become clickable too
+ *   data-menu-label="filter by feeling"   the words before those buttons (default: the field's name)
  *
  * Other options: data-style="none" (no styling of its own), data-title="no" (no post titles),
  * data-fields="no" (don't show field values), data-caption="no" (no photo caption).
@@ -19,7 +21,7 @@
  * so any rule the page writes wins. Hooks for styling:
  *   .kmp-post[data-emotion~="tender"]   every post carries its tag values as data attributes
  *   .kmp-fields .kmp-field .kmp-field-name .kmp-tag[data-value="tender"]
- *   .kmp-menu button[aria-pressed="true"]   .kmp-group[data-value]   .kmp-group-title
+ *   .kmp-menu .kmp-menu-label .kmp-menu button[aria-pressed="true"]   .kmp-group[data-value]   .kmp-group-title
  *
  * The HTML comes from the server, which escapes anything typed as HTML, so it's safe to insert.
  */
@@ -39,9 +41,12 @@
       ":where(.kmp-fields){display:flex;flex-wrap:wrap;gap:.3em 1em;font-size:.85em;margin:-.6em 0 1em}" +
       ":where(.kmp-field-name){opacity:.6;margin-right:.3em}" +
       ":where(.kmp-tag){display:inline-block;border:1px solid currentColor;border-radius:99px;padding:0 .55em;margin:0 .25em .2em 0;line-height:1.5}" +
-      ":where(.kmp-menu){display:flex;flex-wrap:wrap;gap:.4em;margin:0 0 1.5em}" +
+      ":where(.kmp-menu){display:flex;flex-wrap:wrap;align-items:center;gap:.4em;margin:0 0 1.5em}" +
+      ":where(.kmp-menu-label){opacity:.7;margin-right:.3em}" +
+      ":where(button.kmp-tag){font:inherit;font-size:inherit;color:inherit;background:none;cursor:pointer}" +
       ":where(.kmp-menu button){font:inherit;color:inherit;background:none;border:1px solid currentColor;border-radius:99px;padding:.1em .8em;cursor:pointer}" +
-      ":where(.kmp-menu button[aria-pressed=true]){outline:2px solid currentColor;outline-offset:1px;font-weight:bold}" +
+      ":where(.kmp-menu button[aria-pressed=true]){background:currentColor}" +
+      ":where(.kmp-menu button[aria-pressed=true] span){filter:invert(1)}" +
       ":where(.kmp-group-title){margin:1.5em 0 .8em}" +
       ":where(.kmp-image){margin:1em 0}" +
       ":where(.kmp-image) img{display:block}" +
@@ -73,7 +78,7 @@
     return v == null ? [] : Array.isArray(v) ? v : [v];
   }
 
-  function fieldList(post, defs) {
+  function fieldList(post, defs, clickable) {
     var box = el("div", "kmp-fields");
     defs.forEach(function (d) {
       var vals = valuesOf(post, d.key);
@@ -83,7 +88,11 @@
       f.appendChild(el("span", "kmp-field-name", d.name));
       vals.forEach(function (v) {
         if (d.kind === "tags") {
-          var t = el("span", "kmp-tag", v);
+          var t = el(d.key === clickable ? "button" : "span", "kmp-tag", v);
+          if (d.key === clickable) {
+            t.type = "button";
+            t.title = "show only “" + v + "”";
+          }
           t.setAttribute("data-value", slug(v));
           f.appendChild(t);
         } else {
@@ -117,7 +126,7 @@
       a.appendChild(time);
     }
     if (opts.fields) {
-      var fl = fieldList(post, defs);
+      var fl = fieldList(post, defs, opts.menu);
       if (fl) a.appendChild(fl);
     }
     var body = el("div", "kmp-body");
@@ -157,6 +166,12 @@
     return seen;
   }
 
+  // Hide or show an element even if the page's CSS gives it a display value (which beats [hidden]).
+  function show(node, visible) {
+    node.hidden = !visible;
+    node.style.display = visible ? "" : "none";
+  }
+
   function hasValue(post, key, value) {
     return valuesOf(post, key).some(function (v) { return slug(v) === slug(value); });
   }
@@ -171,28 +186,41 @@
 
     if (menuDef) {
       var menu = el("nav", "kmp-menu");
-      menu.setAttribute("aria-label", menuDef.name);
+      var label = el("span", "kmp-menu-label", opts.menuLabel || menuDef.name);
+      label.id = "kmp-menu-" + Math.random().toString(36).slice(2);
+      menu.setAttribute("aria-labelledby", label.id);
+      menu.appendChild(label);
       var values = [""].concat(valuesInOrder(menuDef, posts).filter(function (v) {
         return posts.some(function (p) { return hasValue(p, menuDef.key, v); });
       }));
       values.forEach(function (v) {
-        var b = el("button", null, v || "all");
+        var b = el("button");
+        b.appendChild(el("span", null, v || "all"));
         b.type = "button";
         b.setAttribute("data-value", v ? slug(v) : "");
         b.setAttribute("aria-pressed", v ? "false" : "true");
         b.addEventListener("click", function () {
-          [].forEach.call(menu.children, function (x) { x.setAttribute("aria-pressed", String(x === b)); });
+          [].forEach.call(menu.querySelectorAll("button"), function (x) { x.setAttribute("aria-pressed", String(x === b)); });
           [].forEach.call(box.querySelectorAll(".kmp-post"), function (a) {
             var mine = (a.getAttribute("data-" + menuDef.key.replace(/_/g, "-")) || "").split(" ");
-            a.hidden = Boolean(v) && mine.indexOf(slug(v)) < 0;
+            show(a, !v || mine.indexOf(slug(v)) >= 0);
           });
           [].forEach.call(box.querySelectorAll(".kmp-group"), function (g) {
-            g.hidden = !g.querySelector(".kmp-post:not([hidden])");
+            show(g, Boolean(g.querySelector(".kmp-post:not([hidden])")));
           });
         });
         menu.appendChild(b);
       });
       box.appendChild(menu);
+      // Clicking a tag on a post picks that tag in the menu.
+      box.addEventListener("click", function (ev) {
+        var tag = ev.target.closest && ev.target.closest("button.kmp-tag");
+        if (!tag) return;
+        var match = menu.querySelector('button[data-value="' + tag.getAttribute("data-value") + '"]');
+        if (!match) return;
+        match.click();
+        if (menu.getBoundingClientRect().top < 0) menu.scrollIntoView({ behavior: "smooth", block: "start" });
+      });
     }
 
     if (groupDef) {
@@ -235,6 +263,7 @@
       list: !slugAttr && !image,
       group: attr("group"),
       menu: attr("menu"),
+      menuLabel: attr("menu-label"),
     };
     if (!user) return;
     if (attr("style") !== "none") css();

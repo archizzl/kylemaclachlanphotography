@@ -183,13 +183,16 @@ Everything is inserted as plain HTML where the `<script>` tag sits, with no ifra
 | `data-filter="emotion:tender"` | Only posts with that value. For several, separate with commas; a post must match all of them. |
 | `data-sort="no"` | Order by a number or text field, or `date` for oldest first. Add `-` in front to reverse (`-no`). The default is newest first. |
 | `data-group="emotion"` | Show a heading for each value (tags in their `choices` order), with its posts under it. |
-| `data-menu="emotion"` | Add buttons readers click to show one value at a time. |
+| `data-menu="emotion"` | Add a labelled row of buttons that readers click to filter to one value. "all" is selected first. Each post's own tags for that field become clickable filters too. |
+| `data-menu-label="filter by feeling"` | The words before those buttons. Defaults to the field's name. |
 | `data-title="no"` | Hide post titles and dates. |
 | `data-fields="no"` | Hide field values. |
 | `data-caption="no"` | Hide photo captions. |
 | `data-style="none"` | Turn off the few built-in default styles. |
 
 These can be combined, for example a menu plus number order: `data-menu="emotion" data-sort="-no"`.
+
+**Keep the reader's choices simple.** The usual pattern is a single list in the blog's natural order (newest first, the default), with one labelled filter row (`data-menu`). Don't give readers a second toggle for "views" unless their old blog had one. Use `data-group` for a page that is *meant* to be an index by category, such as an archive page.
 
 ### Styling it to match
 
@@ -206,7 +209,8 @@ The built-in defaults use `:where()`, so they have no specificity, and they load
 .kmp-field-name {} .kmp-field-value {} /* its label, and a number/text value */
 .kmp-tag {} .kmp-tag[data-value="tender"] {}   /* one tag (values are lowercased, spaces → -) */
 .kmp-body {} .kmp-body img {}          /* the post's text */
-.kmp-menu {} .kmp-menu button[aria-pressed="true"] {}
+.kmp-menu {} .kmp-menu-label {} .kmp-menu button[aria-pressed="true"] {}   /* filter row; selected button */
+button.kmp-tag {}                      /* a post's tags, when they filter the menu */
 .kmp-group {} .kmp-group[data-value="tender"] {} .kmp-group-title {}
 .kmp-image {} .kmp-image img {} .kmp-image figcaption {}   /* a photo embed (<figure>) */
 .kmp-error {} .kmp-empty {}

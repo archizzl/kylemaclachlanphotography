@@ -103,7 +103,7 @@
   .kmp-field-no::before { content: "no."; font-size: 11px; position: absolute; top: 9px; }
   .kmp-field-no .kmp-field-value { margin-top: 8px; }
 
-  /* one colour per feeling, on tags, menu buttons and group headings */
+  /* one colour per feeling, on tags and filter buttons */
   [data-value="tender"]   { --feel: #ffc2dc; }
   [data-value="restless"] { --feel: #ffcf99; }
   [data-value="lonely"]   { --feel: #b9dcff; }
@@ -111,20 +111,22 @@
   [data-value="giddy"]    { --feel: #fff08a; }
   .kmp-tag[data-value] { background: var(--feel, #fff); }
 
-  .kmp-menu { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin: 0 0 40px; }
+  /* the feeling filter: a label, then one pill per feeling; the chosen one is filled in dark */
+  .kmp-menu { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 8px; margin: 0 0 44px; }
+  .kmp-menu-label { flex-basis: 100%; text-align: center; font-weight: bold; }
   .kmp-menu button {
     font: inherit; font-size: 16px; color: var(--ink); cursor: pointer;
     background: var(--feel, #fff); border: 2px solid var(--ink); border-radius: 99px; padding: 2px 14px;
-    box-shadow: 3px 3px 0 var(--ink); transition: transform 0.1s;
+    transition: transform 0.1s;
   }
   .kmp-menu button:hover { transform: rotate(-3deg); }
-  .kmp-menu button[aria-pressed="true"] { box-shadow: none; transform: translate(3px, 3px); text-decoration: underline wavy; }
+  .kmp-menu button[aria-pressed="true"] { background: var(--ink); color: #fff; }
+  .kmp-menu button[aria-pressed="true"] span { filter: none; }
+  .kmp-menu button[aria-pressed="true"]::before { content: "✓ "; }
+  /* tags on a poem filter by that feeling too */
+  button.kmp-tag { font: inherit; font-size: 15px; color: var(--ink); cursor: pointer; }
+  button.kmp-tag:hover { border-style: dashed; }
 
-  .kmp-group-title {
-    display: inline-block; font-size: 34px; margin: 20px 0 26px;
-    background: var(--feel, var(--lemon)); padding: 0 16px; border-radius: 12px; transform: rotate(-2deg);
-  }
-  .kmp-group-title::before { content: "feeling "; font-size: 18px; font-weight: normal; }
 
   footer { text-align: center; font-size: 15px; margin-top: 40px; }
 </style>
@@ -139,26 +141,17 @@
 <footer>✿ made with insomnia & a houseplant ✿</footer>
 
 <script>
-  // Three views, each one embed code (the dashboard's settings page shows these):
-  //   ./              every poem, highest number first, with emotion buttons to filter
-  //   ./?by=feeling   poems grouped under each emotion, in number order
-  //   ./?poem=<slug>  one poem
-  const q = new URLSearchParams(location.search);
-  const poem = q.get("poem");
-  const byFeeling = q.get("by") === "feeling";
+  // Every poem, newest first, with a filter by feeling. ?poem=<slug> shows just one poem.
+  // Each is one embed code from the dashboard.
+  const poem = new URLSearchParams(location.search).get("poem");
   const s = document.createElement("script");
   s.src = "http://localhost:8127/embed.js";
   s.async = true;
   s.dataset.user = "smallhours";
   if (poem) s.dataset.post = poem;
-  else if (byFeeling) Object.assign(s.dataset, { list: "50", group: "emotion", sort: "no" });
-  else Object.assign(s.dataset, { list: "50", menu: "emotion", sort: "-no" });
+  else Object.assign(s.dataset, { list: "50", menu: "emotion", menuLabel: "filter by feeling" });
   document.getElementById("poems").append(s);
-  document.getElementById("nav").innerHTML = poem
-    ? '<a href="./">← all the poems</a>'
-    : byFeeling
-      ? '<a href="./">newest first</a> · <b>by feeling</b>'
-      : '<b>newest first</b> · <a href="./?by=feeling">by feeling</a>';
+  document.getElementById("nav").innerHTML = poem ? '<a href="./">← all the poems</a>' : "";
 </script>
 </body>
 </html>

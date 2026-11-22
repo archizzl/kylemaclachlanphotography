@@ -69,7 +69,7 @@ npm test         # unit tests + the real Worker against a throwaway local D1/R2
   - `xenolab`: "synthetic tenderness", xenofeminist photo and writing.
 
   Their local passwords are in the script. Then start the `blog-cdn-demo` launch config (port 8128) and open:
-  - http://localhost:8128/poetry/: Comic Sans notebook paper. It shows post fields: emotion tags in their own colors, a filter menu, a "by feeling" view (`?by=feeling`), numbered poems, and where each was written.
+  - http://localhost:8128/poetry/: Comic Sans notebook paper. It shows post fields: poems newest first, with one labelled "filter by feeling" row (clicking a tag on a poem filters too), emotion colors, numbered poems, and where each was written.
   - http://localhost:8128/xeno/: dark acid-and-violet grid. Uses `data-style="none"` and styles everything itself.
 
   Both are plain HTML files in `demo/` that use the same embed codes a friend would paste.
