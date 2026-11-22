@@ -361,15 +361,62 @@ function fieldExamples() {
   const s = attrs => `<script src="${embedOrigin}/embed.js" data-user="${username}" data-list="50" ${attrs} async></script>`;
   const ex = [];
   if (tags) {
-    ex.push([`your posts grouped under each ${tags.name} tag`, s(`data-group="${tags.key}"`)]);
-    ex.push([`buttons so readers can pick a ${tags.name}`, s(`data-menu="${tags.key}"`)]);
+    ex.push([`newest first, with buttons readers click to filter by ${tags.name} (the usual choice)`, s(`data-menu="${tags.key}" data-menu-label="filter by ${tags.name}"`)]);
     ex.push([`only posts tagged "${tags.choices[0]}"`, s(`data-filter="${tags.key}:${tags.choices[0]}"`)]);
   }
   if (num) ex.push([`in ${num.name} order (put a - before it for highest first)`, s(`data-sort="${num.key}"`)]);
+  if (tags) ex.push([`an index page: a heading for each ${tags.name}, with its posts under it`, s(`data-group="${tags.key}"`)]);
   return `<h3 style="font-size:1em;margin:18px 0 4px">using your fields</h3>${ex
     .map(([label, code]) => `<p style="margin:10px 0 2px">${esc(label)}</p><p style="margin:0"><code>${esc(code)}</code> <button data-copycode="${esc(code)}">copy</button></p>`)
     .join("")}
     <p class="muted">you can mix these, like a menu plus number order. each post's values also show under its title (hide them with <code>data-fields="no"</code>).</p>`;
+}
+
+// ---- costs ----
+
+const money = d => (!d ? "$0.00" : d < 0.005 ? "<$0.01" : `$${d.toFixed(2)}`);
+const size = bytes =>
+  bytes >= 1e9 ? `${(bytes / 1e9).toFixed(2)} GB` : bytes >= 1e6 ? `${(bytes / 1e6).toFixed(1)} MB` : bytes >= 1e3 ? `${Math.round(bytes / 1e3)} KB` : bytes > 0 ? "<1 KB" : "0 KB";
+const monthName = (key, partial) =>
+  new Date(`${key}-01T12:00:00Z`).toLocaleDateString("en-US", { month: "short", year: "numeric", timeZone: "UTC" }) + (partial ? " (so far)" : "");
+
+async function costs() {
+  const box = $("#costs");
+  try {
+    const u = await api("usage");
+    const host = esc(u.hostName);
+    // Months where nothing was stored, uploaded or paid are left out (this month always shows).
+    const shown = u.months.filter(m => m.partial || m.gbMonths > 0 || m.uploads || m.domain);
+    const skipped = u.months.length - shown.length;
+    const rows = shown
+      .map(
+        m => `<tr>
+          <td>${monthName(m.month, m.partial)}</td>
+          <td>${size(m.gbMonths * 1e9)}</td>
+          <td>${m.uploads}</td>
+          <td>${money(m.fullPrice)}</td>
+          <td>${money(m.storageCharged)}</td>
+          ${u.domain ? `<td>${m.domain ? money(m.domain) : "–"}</td>` : ""}
+          <td><b>${money(m.total)}</b></td>
+        </tr>`
+      )
+      .join("");
+    const t = u.allTime;
+    box.innerHTML = `
+      <p>you're storing <b>${size(u.stored.files)}</b> of photos and files and <b>${size(u.stored.text)}</b> of writing.</p>
+      <p>all time, your blog has cost <b>${money(t.total)}</b>${t.domain ? ` (${money(t.domain)} of it is your domain)` : ""}.
+        ${t.fullPrice > t.storageCharged ? `storage would have been ${money(t.fullPrice)} without Cloudflare's free allowance.` : ""}</p>
+      ${u.domain ? `<p class="domain-note">your domain <b>${esc(u.domain.name)}</b> is registered through ${host}: ${money(u.domain.yearly)} a year${u.domain.renews ? `, next renewing on ${esc(u.domain.renews)}` : ""}.</p>` : ""}
+      <div class="tablewrap"><table class="costs">
+        <thead><tr><th>month</th><th>stored (average)</th><th>uploads</th><th>full price</th><th>storage cost</th>${u.domain ? "<th>domain</th>" : ""}<th>total</th></tr></thead>
+        <tbody>${rows}</tbody>
+        <tfoot><tr><td>all time</td><td></td><td>${t.uploads}</td><td>${money(t.fullPrice)}</td><td>${money(t.storageCharged)}</td>${u.domain ? `<td>${money(t.domain)}</td>` : ""}<td><b>${money(t.total)}</b></td></tr></tfoot>
+      </table></div>
+      ${skipped ? `<p class="muted" style="font-size:15px">${skipped} month${skipped === 1 ? "" : "s"} with nothing stored or paid aren't shown.</p>` : ""}
+      <p class="muted" style="font-size:15px">how this is worked out: your photos, files and writing are stored with Cloudflare R2, at $${u.rates.storagePerGBMonth} per GB a month, plus $${u.rates.uploadsPerMillion} per million uploads ("full price"). every month the first ${u.rates.freeGBMonths} GB and ${(u.rates.freeUploads / 1e6).toFixed(0)} million uploads are free, shared by all of ${host}'s sites, so "storage cost" is your share of anything over that. readers viewing your posts and photos don't add to it. prices from <a href="${esc(u.rates.source)}" target="_blank" rel="noopener">cloudflare</a>, checked ${esc(u.rates.checked)}.</p>`;
+  } catch (err) {
+    box.innerHTML = `<p class="problem">${esc(err.message)}</p>`;
+  }
 }
 
 // ---- agent keys ----
@@ -568,6 +615,9 @@ function settingsView() {
       <button type="submit">save</button>
     </form>
 
+    <h2>what your blog costs</h2>
+    <div id="costs"><p class="muted">adding it up…</p></div>
+
     <h2>post fields</h2>
     <p class="muted">your own tags and details for posts, like an emotion, a number, or where you wrote it. they show up in the post editor.</p>
     <div id="fields"></div>
@@ -576,6 +626,19 @@ function settingsView() {
     <h2>embedding</h2>
     <p>every published post has an "embed code" button on the posts page. to show your latest posts in one go:</p>
     <p><code>${esc(listSnippet(10))}</code> <button data-act="copylist">copy</button></p>
+    <details class="explain">
+      <summary>what do the parts of an embed code mean?</summary>
+      <dl>
+        <dt><code>&lt;script src="…/embed.js" … async&gt;&lt;/script&gt;</code></dt><dd>the whole thing is one tag you paste into your page, where the writing should appear. the bits in the middle tell it what to show.</dd>
+        <dt><code>data-user="${esc(username)}"</code></dt><dd>whose blog to show: yours. leave it as it is.</dd>
+        <dt><code>data-list="10"</code></dt><dd>show a list of your newest posts, up to that many. change the number to show more or fewer (50 at most).</dd>
+        <dt><code>data-post="my-post"</code></dt><dd>show just one post, by its address (the "address" box in the editor).</dd>
+        <dt><code>data-image="photo.jpg"</code></dt><dd>show one photo, with its description and caption.</dd>
+        <dt><code>data-menu="…"</code>, <code>data-filter="…"</code>, <code>data-sort="…"</code>, <code>data-group="…"</code></dt><dd>use your post fields: a row of filter buttons, only posts with one tag, a different order, or a heading per tag (examples below once you've set up fields).</dd>
+        <dt><code>data-style="none"</code>, <code>data-title="no"</code>, <code>data-fields="no"</code></dt><dd>turn off the built-in styling, the titles and dates, or the field values.</dd>
+        <dt><code>async</code></dt><dd>lets the rest of your page load without waiting for it. leave it in.</dd>
+      </dl>
+    </details>
     ${fieldExamples()}
     <p>photos have their own "embed code" button on the files page.</p>
 
@@ -619,6 +682,7 @@ function settingsView() {
   };
   fieldsEditor();
   agentKeys();
+  costs();
   $("#about").onsubmit = async ev => {
     ev.preventDefault();
     const body = Object.fromEntries(new FormData(ev.target));

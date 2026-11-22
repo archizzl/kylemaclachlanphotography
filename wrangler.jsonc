@@ -22,7 +22,14 @@
     "SITE_ORIGIN": "https://kylemaclachlanphotography.org",
     // Where uploaded files are served from: the R2 bucket's custom domain.
     // Locally, .dev.vars points these at http://localhost:8127 and http://localhost:8127/_cdn instead.
-    "CDN_BASE": "https://cdn.kylemaclachlanphotography.org"
+    "CDN_BASE": "https://cdn.kylemaclachlanphotography.org",
+    // For the cost page: R2's free 10 GB a month is shared by the whole Cloudflare account, so the
+    // Worker needs to know roughly what the account's other buckets hold (GB). On 2026-11-22:
+    // ear-site 84 MB + cabin-site-media 11 MB + label-payouts-receipts 3.5 MB. Check with
+    // `npx wrangler r2 bucket info <bucket>` now and then.
+    "OTHER_STORAGE_GB": "0.1",
+    // Who domains are registered and paid for through, as friends see it.
+    "HOST_NAME": "RFR"
   },
   "d1_databases": [
     {

@@ -14,7 +14,7 @@ export async function loadHome(env, { blog = "", page = 1 } = {}) {
   const { results: blogs } = await env.DB.prepare(
     `SELECT u.username, u.display_name, u.site_url,
        (SELECT COUNT(*) FROM posts p WHERE p.user_id = u.id AND p.published = 1) AS posts,
-       (SELECT COUNT(*) FROM files f WHERE f.user_id = u.id AND f.content_type LIKE 'image/%') AS photos
+       (SELECT COUNT(*) FROM files f WHERE f.user_id = u.id AND f.deleted_at IS NULL AND f.content_type LIKE 'image/%') AS photos
      FROM users u WHERE u.disabled = 0
      ORDER BY lower(CASE WHEN u.display_name = '' THEN u.username ELSE u.display_name END)`
   ).all();
@@ -30,7 +30,7 @@ export async function loadHome(env, { blog = "", page = 1 } = {}) {
     .all();
   const { results: photos } = await env.DB.prepare(
     `SELECT f.*, u.username, u.display_name FROM files f JOIN users u ON u.id = f.user_id
-     WHERE f.content_type LIKE 'image/%' AND u.disabled = 0 AND (?1 = '' OR u.username = ?1)
+     WHERE f.content_type LIKE 'image/%' AND f.deleted_at IS NULL AND u.disabled = 0 AND (?1 = '' OR u.username = ?1)
      ORDER BY f.created_at DESC LIMIT ?2`
   )
     .bind(only, PHOTO_LIMIT)

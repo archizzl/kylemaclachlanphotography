@@ -1,6 +1,6 @@
 // Server-built pages: the two login forms, Archie's admin page, the dashboard shell and errors.
 
-import { escapeHtml as e } from "./util.js";
+import { escapeHtml as e, money } from "./util.js";
 
 function shell(title, body, { bodyClass = "", scripts = "" } = {}) {
   return `<!DOCTYPE html>
@@ -65,11 +65,18 @@ export function adminPage(users, note = null) {
   <td><b>${e(u.username)}</b>${u.display_name ? `<br><span class="muted">${e(u.display_name)}</span>` : ""}</td>
   <td>${u.published} published<br><span class="muted">${u.drafts} draft${u.drafts === 1 ? "" : "s"}</span></td>
   <td>${u.files} file${u.files === 1 ? "" : "s"}<br><span class="muted">${kb(u.bytes || 0)}</span></td>
+  <td>${money(u.cost?.total)}<br><span class="muted">${money(u.cost?.fullPrice)} at full price</span></td>
   <td>${u.disabled ? '<span class="draft">disabled</span>' : "active"}</td>
   <td class="actions">
     <form method="post" action="/admin/users/${u.id}/password">
       <input name="password" type="text" placeholder="new password (blank = make one)" autocomplete="off" aria-label="new password for ${e(u.username)}">
       <button type="submit">reset password</button>
+    </form>
+    <form method="post" action="/admin/users/${u.id}/domain" class="domain">
+      <input name="domain" value="${e(u.domain || "")}" placeholder="their-domain.com" aria-label="domain for ${e(u.username)}">
+      <input name="cost" value="${u.domain_cost_cents ? (u.domain_cost_cents / 100).toFixed(2) : ""}" placeholder="$/year" aria-label="yearly cost" style="width:80px">
+      <input name="since" type="date" value="${e(u.domain_since || "")}" aria-label="first paid on" style="width:140px">
+      <button type="submit">save domain</button>
     </form>
     <form method="post" action="/admin/users/${u.id}/disabled">
       <input type="hidden" name="disabled" value="${u.disabled ? 0 : 1}">
@@ -103,10 +110,11 @@ ${noteHtml}
   <button type="submit">add</button>
 </form>
 <p class="muted">they log in at <a href="/login">/login</a>. their files go to <code>cdn…/username/</code>.</p>
+<p class="muted">costs: R2 storage after Cloudflare's free 10 GB a month (shared by the whole account), plus any domain you pay for them. "full price" is before the free allowance. leave a domain blank to remove it.</p>
 </section>
 <section>
 <h2>everyone</h2>
-${users.length ? `<table class="users"><thead><tr><th>blog</th><th>posts</th><th>files</th><th>status</th><th></th></tr></thead><tbody>${rows}</tbody></table>` : "<p>no one yet.</p>"}
+${users.length ? `<table class="users"><thead><tr><th>blog</th><th>posts</th><th>files</th><th>cost, all time</th><th>status</th><th></th></tr></thead><tbody>${rows}</tbody></table>` : "<p>no one yet.</p>"}
 </section>
 </main>`,
     {

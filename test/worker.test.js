@@ -365,3 +365,44 @@ test("agent keys work like the person, can be revoked, and can't manage keys or 
   await archie(`/admin/users/${id}/password`, { method: "POST", form: { password: "" } });
   assert.equal((await agent("/api/me", { key: key2 })).status, 401);
 });
+
+test("each blog sees its own costs; deleted files stay on record; admin can add a domain", async () => {
+  await archie("/admin/users", { method: "POST", form: { username: "cost-test", password: "cost-password-1" } });
+  const me = browser("13.0.0.1");
+  await me("/login", { method: "POST", form: { username: "cost-test", password: "cost-password-1" } });
+  const jpg = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, ...new Array(996).fill(7)]);
+  const up = await me("/api/files?name=a.jpg", { method: "PUT", raw: jpg, headers: { "content-type": "image/jpeg", "content-length": "1000" } });
+  const file = (await up.json()).file;
+  await me("/api/posts", { method: "POST", body: { title: "words", body: "hello there", published: 1 } });
+
+  let u = await (await me("/api/usage")).json();
+  assert.equal(u.stored.files, 1000);
+  assert.ok(u.stored.text > 20);
+  assert.equal(u.months[0].uploads, 1);
+  assert.ok(u.months[0].partial);
+  assert.equal(u.allTime.total, 0); // far inside the free allowance
+  assert.ok(u.allTime.fullPrice > 0);
+  assert.equal(u.domain, null);
+  assert.equal(u.hostName, "RFR");
+
+  // Deleting a file: gone from lists, still counted for the time it was stored, name stays taken.
+  await me(`/api/files/${file.id}`, { method: "DELETE" });
+  assert.equal((await (await me("/api/files")).json()).files.length, 0);
+  assert.ok((await env.DB.prepare("SELECT deleted_at FROM files WHERE id = ?").bind(file.id).first()).deleted_at);
+  u = await (await me("/api/usage")).json();
+  assert.equal(u.stored.files, 0);
+  assert.equal(u.months[0].uploads, 1);
+  const again = (await (await me("/api/files?name=a.jpg", { method: "PUT", raw: jpg, headers: { "content-type": "image/jpeg", "content-length": "1000" } })).json()).file;
+  assert.notEqual(again.key, "cost-test/a.jpg");
+
+  // Archie records a domain paid for through RFR.
+  const { id } = await env.DB.prepare("SELECT id FROM users WHERE username = 'cost-test'").first();
+  const page = await (await archie(`/admin/users/${id}/domain`, { method: "POST", form: { domain: "Cost-Test.com", cost: "10.44", since: "2024-01-15" } })).text();
+  assert.match(page, /cost-test&#39;s domain is cost-test\.com/);
+  assert.match(page, /cost, all time/);
+  u = await (await me("/api/usage")).json();
+  assert.equal(u.domain.name, "cost-test.com");
+  assert.equal(u.domain.yearly, 10.44);
+  assert.ok(u.allTime.domain >= 20.88); // paid in 2024 and 2025 at least
+  assert.equal((await archie(`/admin/users/${id}/domain`, { method: "POST", form: { domain: "nope nope" } })).status, 400);
+});

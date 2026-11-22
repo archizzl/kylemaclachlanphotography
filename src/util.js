@@ -34,6 +34,13 @@ export async function readJson(request) {
 
 export const now = () => new Date().toISOString();
 
+// $0.00, or "<$0.01" for amounts too small to show in cents.
+export function money(dollars) {
+  if (!dollars) return "$0.00";
+  if (dollars < 0.005) return "<$0.01";
+  return `$${dollars.toFixed(2)}`;
+}
+
 export function today() {
   return new Date().toISOString().slice(0, 10);
 }

@@ -60,6 +60,18 @@ export function cleanSettings(input) {
   return [{ display_name: displayName, site_url: site, post_url_pattern: patternRaw ? patternRaw : "" }, null];
 }
 
+// A friend's domain as Archie records it at /admin. Returns [{ domain, cents, since }, problem].
+export function cleanDomain(input) {
+  const domain = String(input?.domain || "").trim().toLowerCase().replace(/^https?:\/\//, "").replace(/\/.*$/, "");
+  if (!domain) return [{ domain: "", cents: 0, since: "" }, null];
+  if (!/^(?=.{3,253}$)([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/.test(domain)) return [null, "That doesn't look like a domain (like maya.com)."];
+  const dollars = Number(String(input?.cost ?? "").replace(/[$\s]/g, "") || 0);
+  if (!Number.isFinite(dollars) || dollars < 0 || dollars > 10000) return [null, "The yearly cost should be a number of dollars, like 10.44."];
+  const since = String(input?.since || "");
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(since) || isNaN(Date.parse(since))) return [null, "Add the date the domain was first paid for."];
+  return [{ domain, cents: Math.round(dollars * 100), since }, null];
+}
+
 // ---- uploads ----
 
 export const MAX_UPLOAD = 25 * 1024 * 1024;

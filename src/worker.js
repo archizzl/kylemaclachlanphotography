@@ -20,9 +20,10 @@ import {
   startSession, userFromAgentKey,
 } from "./auth.js";
 import { renderInline, renderMarkdown } from "./markdown.js";
-import { cacheControlFor, checkUpload, cleanFileText, cleanPost, cleanSettings, contentMatches, isImage, usernameProblem } from "./rules.js";
+import { cacheControlFor, checkUpload, cleanDomain, cleanFileText, cleanPost, cleanSettings, contentMatches, isImage, usernameProblem } from "./rules.js";
 import { jsonFeed, postMarkdownFile, postMdKey, publicImage, publicPost, publicUser, rssFeed } from "./feeds.js";
 import { homePage, loadHome } from "./home.js";
+import { loadCostData, nextRenewal, RATES, reportFor, storedNow } from "./costs.js";
 import { cleanFieldDefs, cleanPostFields, listQuery, parseJson } from "./fields.js";
 import { adminLoginPage, adminPage, dashboardPage, loginPage, simplePage } from "./pages.js";
 import { html, json, now, readJson, redirect } from "./util.js";
@@ -172,11 +173,17 @@ async function admin(path, method, request, env) {
     return html(adminPage(await listUsers(env), { text: `added ${username}.`, password }));
   }
 
-  const m = path.match(/^\/admin\/users\/(\d+)\/(password|disabled)$/);
+  const m = path.match(/^\/admin\/users\/(\d+)\/(password|disabled|domain)$/);
   if (m && method === "POST") {
     const user = await env.DB.prepare("SELECT * FROM users WHERE id = ?").bind(Number(m[1])).first();
     if (!user) return redirect("/admin");
     const form = await request.formData();
+    if (m[2] === "domain") {
+      const [d, problem] = cleanDomain({ domain: form.get("domain"), cost: form.get("cost"), since: form.get("since") });
+      if (problem) return html(adminPage(await listUsers(env), { text: problem, problem: true }), 400);
+      await env.DB.prepare("UPDATE users SET domain = ?, domain_cost_cents = ?, domain_since = ? WHERE id = ?").bind(d.domain, d.cents, d.since, user.id).run();
+      return html(adminPage(await listUsers(env), { text: d.domain ? `${user.username}'s domain is ${d.domain}.` : `removed ${user.username}'s domain.` }));
+    }
     if (m[2] === "password") {
       const typed = String(form.get("password") || "").trim();
       const password = typed || generatePassword();
@@ -203,13 +210,17 @@ async function admin(path, method, request, env) {
 
 async function listUsers(env) {
   const { results } = await env.DB.prepare(
-    `SELECT u.id, u.username, u.display_name, u.disabled,
+    `SELECT u.id, u.username, u.display_name, u.disabled, u.created_at, u.domain, u.domain_cost_cents, u.domain_since,
        (SELECT COUNT(*) FROM posts p WHERE p.user_id = u.id AND p.published = 1) AS published,
        (SELECT COUNT(*) FROM posts p WHERE p.user_id = u.id AND p.published = 0) AS drafts,
-       (SELECT COUNT(*) FROM files f WHERE f.user_id = u.id) AS files,
-       (SELECT COALESCE(SUM(size), 0) FROM files f WHERE f.user_id = u.id) AS bytes
+       (SELECT COUNT(*) FROM files f WHERE f.user_id = u.id AND f.deleted_at IS NULL) AS files,
+       (SELECT COALESCE(SUM(size), 0) FROM files f WHERE f.user_id = u.id AND f.deleted_at IS NULL) AS bytes
      FROM users u ORDER BY u.username`
   ).all();
+  // All-time cost per friend, for the admin table.
+  const data = await loadCostData(env);
+  const now = Date.now();
+  for (const u of results) u.cost = reportFor(u, data, { otherGB: Number(env.OTHER_STORAGE_GB) || 0, now }).allTime;
   return results;
 }
 
@@ -237,6 +248,22 @@ async function api(path, method, request, env, user, url) {
       .run();
     return json({ ok: true, ...s });
   }
+  // What this blog costs, by month and all time.
+  if (path === "/api/usage" && method === "GET") {
+    const now = Date.now();
+    const data = await loadCostData(env);
+    const report = reportFor(user, data, { otherGB: Number(env.OTHER_STORAGE_GB) || 0, now });
+    return json({
+      ...report,
+      stored: storedNow(data, user.id),
+      rates: RATES,
+      hostName: env.HOST_NAME || "RFR",
+      domain: user.domain
+        ? { name: user.domain, yearly: user.domain_cost_cents / 100, since: user.domain_since, renews: nextRenewal(user.domain_since, now) }
+        : null,
+    });
+  }
+
   // The blog's own post fields (tags, numbers, text).
   if (path === "/api/fields" && method === "PUT") {
     const body = (await readJson(request)) || {};
@@ -304,13 +331,13 @@ async function api(path, method, request, env, user, url) {
 
   // files
   if (path === "/api/files" && method === "GET") {
-    const { results } = await env.DB.prepare("SELECT * FROM files WHERE user_id = ? ORDER BY created_at DESC, id DESC").bind(user.id).all();
+    const { results } = await env.DB.prepare("SELECT * FROM files WHERE user_id = ? AND deleted_at IS NULL ORDER BY created_at DESC, id DESC").bind(user.id).all();
     return json({ files: results.map(f => ({ ...f, url: `${base}/${f.key}` })) });
   }
   if (path === "/api/files" && method === "PUT") return upload(request, env, user, url);
   const fm = path.match(/^\/api\/files\/(\d+)$/);
   if (fm && (method === "DELETE" || method === "PUT")) {
-    const file = await env.DB.prepare("SELECT * FROM files WHERE id = ? AND user_id = ?").bind(Number(fm[1]), user.id).first();
+    const file = await env.DB.prepare("SELECT * FROM files WHERE id = ? AND user_id = ? AND deleted_at IS NULL").bind(Number(fm[1]), user.id).first();
     if (!file) return json({ error: "That file isn't there any more." }, 404);
     if (method === "PUT") {
       const t = cleanFileText(await readJson(request));
@@ -318,7 +345,9 @@ async function api(path, method, request, env, user, url) {
       return json({ file: { ...file, ...t, url: `${base}/${file.key}` } });
     }
     await env.FILES.delete(file.key);
-    await env.DB.prepare("DELETE FROM files WHERE id = ?").bind(file.id).run();
+    // The row stays, marked deleted, so the cost history still counts the time it was stored.
+    // Its name stays taken too, so a cached copy of the old file never shows up under a new one.
+    await env.DB.prepare("UPDATE files SET deleted_at = ? WHERE id = ?").bind(now(), file.id).run();
     return json({ ok: true });
   }
 
@@ -467,7 +496,7 @@ async function publicRoute(username, name, ext, env, url) {
 async function publicImageRoute(username, name, env) {
   const headers = { ...CORS, "cache-control": `public, max-age=${PUBLIC_CACHE_SECONDS}`, "x-content-type-options": "nosniff" };
   const file = await env.DB.prepare(
-    "SELECT f.* FROM files f JOIN users u ON u.id = f.user_id WHERE u.username = ? AND u.disabled = 0 AND f.key = ?"
+    "SELECT f.* FROM files f JOIN users u ON u.id = f.user_id WHERE u.username = ? AND u.disabled = 0 AND f.deleted_at IS NULL AND f.key = ?"
   )
     .bind(username, `${username}/${name}`)
     .first();
