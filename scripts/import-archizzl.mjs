@@ -3,7 +3,9 @@
 //
 //   KMP_AGENT_KEY=kmp_… node scripts/import-archizzl.mjs                       # against production
 //   KMP_AGENT_KEY=kmp_… BASE=http://localhost:8127 node scripts/import-archizzl.mjs
-//   … --dry-run   prints the converted posts without sending anything
+//   … --dry-run     prints the converted posts without sending anything
+//   … --as-drafts   imports every post as a draft and uploads no images (both are public), so the
+//                   person can look first. Run again without it to publish what's published on archizzl.
 //
 // - blog/src/*.txt become published posts, blog/drafts/*.txt stay drafts (a "status:" line wins).
 // - Slugs and dates are kept. Tags go into an open "tags" field. Running it again updates posts
@@ -20,6 +22,7 @@ import { homedir } from "node:os";
 const BASE = (process.env.BASE || "https://kylemaclachlanphotography.org").replace(/\/+$/, "");
 const KEY = process.env.KMP_AGENT_KEY;
 const DRY = process.argv.includes("--dry-run");
+const AS_DRAFTS = process.argv.includes("--as-drafts");
 const BLOG = process.env.ARCHIZZL_BLOG || join(homedir(), "dev/archizzl.github.io/blog");
 const SITE = "https://archizzl.com";
 
@@ -154,7 +157,7 @@ async function main() {
   const imageMap = {};
   const imgDir = join(BLOG, "images");
   const existing = (await api("/api/files")).files;
-  if (existsSync(imgDir)) {
+  if (existsSync(imgDir) && !AS_DRAFTS) {
     for (const name of readdirSync(imgDir).filter(n => TYPES[extname(n).toLowerCase()])) {
       const already = existing.find(f => f.name === name.toLowerCase().replace(/[^a-z0-9._-]+/g, "-"));
       const file = already || (await api(`/api/files?name=${encodeURIComponent(name)}`, { method: "PUT", raw: readFileSync(join(imgDir, name)), headers: { "content-type": TYPES[extname(name).toLowerCase()] } })).file;
@@ -171,16 +174,20 @@ async function main() {
       slug: p.slug,
       date: p.date,
       body: convertBody(p.body, imageMap, warnings),
-      published: p.published,
+      published: AS_DRAFTS ? false : p.published,
       fields: { tags: p.tags, ...(p.description ? { description: p.description } : {}) },
     };
     const match = current.find(c => c.slug === p.slug);
     const { post } = match ? await api(`/api/posts/${match.id}`, { method: "PUT", body: payload }) : await api("/api/posts", { method: "POST", body: payload });
     if (post.slug !== p.slug) warnings.push(`${p.slug} was saved as ${post.slug} (that address was taken)`);
-    console.log(`${match ? "updated" : "added"} ${p.published ? "post " : "draft"} ${post.slug}`);
+    console.log(`${match ? "updated" : "added"} ${post.published ? "post " : "draft"} ${post.slug}${AS_DRAFTS && p.published ? "  (published on archizzl; a draft here until you say so)" : ""}`);
   }
   if (warnings.length) console.log("\nwarnings:\n- " + warnings.join("\n- "));
-  console.log(`\ndone. ${posts.filter(p => p.published).length} published, ${posts.filter(p => !p.published).length} drafts.`);
+  console.log(
+    AS_DRAFTS
+      ? `\ndone. all ${posts.length} posts are drafts for now (${posts.filter(p => p.published).length} are published on archizzl); no images uploaded yet.`
+      : `\ndone. ${posts.filter(p => p.published).length} published, ${posts.filter(p => !p.published).length} drafts.`
+  );
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) await main();
