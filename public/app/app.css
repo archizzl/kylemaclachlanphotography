@@ -170,3 +170,12 @@ td.actions details form { margin-top: 6px; }
 .problem.locked { font-weight: bold; }
 .preview .box { display: inline-block; border: 1px solid currentColor; padding: 1px 8px; margin: 0 1px; border-radius: 3px; }
 .chips input.newtags { position: static; opacity: 1; pointer-events: auto; font-size: 15px; padding: 1px 8px; border-radius: 99px; width: 15em; }
+
+/* dragging photos onto the editor */
+.editor { position: relative; }
+.editor.dropping::after {
+  content: "drop to add photos";
+  position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+  background: rgba(255, 255, 255, 0.85); border: 2px dashed #000; border-radius: 5px;
+  font-size: 22px; pointer-events: none;
+}

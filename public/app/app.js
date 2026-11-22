@@ -171,14 +171,14 @@ async function editView(id) {
     ${fieldInputs(me.fields || [], post.fields || {}, isNew)}
     <div class="toolbar">
       <button id="img">insert photo</button>
-      <input id="imgfile" type="file" accept="image/*" hidden>
+      <input id="imgfile" type="file" accept="image/*" multiple hidden>
       <span style="flex:1"></span>
       <span class="status" id="status"></span>
       <button id="draft"></button>
       <button id="publish" class="primary"></button>
     </div>
     <div class="editor">
-      <textarea id="body" placeholder="write here. a blank line starts a new paragraph." aria-label="post text">${esc(post.body_md)}</textarea>
+      <textarea id="body" placeholder="write here. a blank line starts a new paragraph. drag or paste photos in." aria-label="post text">${esc(post.body_md)}</textarea>
       <div class="preview" id="preview" aria-live="polite"></div>
     </div>
     <p class="cheats"><code>**bold**</code> <code>*italic*</code> <code>[link text](https://…)</code> <code>## heading</code>
@@ -245,29 +245,66 @@ async function editView(id) {
     if ((ev.metaKey || ev.ctrlKey) && ev.key === "s") { ev.preventDefault(); save(post.published); }
   });
 
-  $("#img").onclick = () => $("#imgfile").click();
-  $("#imgfile").onchange = async ev => {
-    const file = ev.target.files[0];
-    ev.target.value = "";
-    if (!file) return;
-    status.textContent = "uploading photo…";
-    try {
-      const f = await uploadFile(file);
-      const alt = file.name.replace(/\.[^.]+$/, "").replace(/[-_]+/g, " ");
-      const text = `![${alt}](${f.url})`;
-      const at = body.selectionStart ?? body.value.length;
-      const before = body.value.slice(0, at), after = body.value.slice(at);
-      const pad = before && !before.endsWith("\n\n") ? (before.endsWith("\n") ? "\n" : "\n\n") : "";
-      body.value = `${before}${pad}${text}\n\n${after}`;
-      body.focus();
-      changed();
-      preview();
-      toast("photo added. change the words in [ ] to describe it.");
-    } catch (err) {
-      status.textContent = "";
-      toast(err.message, true);
+  // Photos can come from the "insert photo" button, from dragging them onto the editor, or from
+  // pasting them. Each is shrunk, uploaded, and added where the cursor is, on its own line.
+  async function insertPhotos(files) {
+    const photos = [...files].filter(f => f.type.startsWith("image/") || /\.(heic|heif)$/i.test(f.name));
+    if (!photos.length) return;
+    let added = 0;
+    for (const [i, file] of photos.entries()) {
+      status.textContent = photos.length > 1 ? `uploading photo ${i + 1} of ${photos.length}…` : "uploading photo…";
+      try {
+        const f = await uploadFile(file);
+        const alt = /^image\.(png|jpe?g|gif|webp)$/i.test(file.name) ? "" : file.name.replace(/\.[^.]+$/, "").replace(/[-_]+/g, " ");
+        const text = `![${alt}](${f.url})`;
+        const at = body.selectionStart ?? body.value.length;
+        const before = body.value.slice(0, at), after = body.value.slice(at);
+        const pad = before && !before.endsWith("\n\n") ? (before.endsWith("\n") ? "\n" : "\n\n") : "";
+        body.value = `${before}${pad}${text}\n\n${after}`;
+        const caret = (before + pad + text + "\n\n").length;
+        body.setSelectionRange(caret, caret); // the next photo goes after this one
+        added++;
+      } catch (err) {
+        toast(`${file.name}: ${err.message}`, true);
+      }
     }
+    status.textContent = "";
+    if (!added) return;
+    body.focus();
+    changed();
+    preview();
+    toast(`${added === 1 ? "photo" : `${added} photos`} added. change the words in [ ] to describe ${added === 1 ? "it" : "them"}.`);
+  }
+
+  $("#img").onclick = () => $("#imgfile").click();
+  $("#imgfile").onchange = ev => {
+    const files = [...ev.target.files];
+    ev.target.value = "";
+    insertPhotos(files);
   };
+
+  // Drag photos onto the writing box or the preview.
+  const editor = app.querySelector(".editor");
+  const hasFiles = ev => [...(ev.dataTransfer?.types || [])].includes("Files");
+  let depth = 0;
+  editor.addEventListener("dragenter", ev => { if (hasFiles(ev)) { depth++; editor.classList.add("dropping"); } });
+  editor.addEventListener("dragleave", () => { if (--depth <= 0) { depth = 0; editor.classList.remove("dropping"); } });
+  editor.addEventListener("dragover", ev => { if (hasFiles(ev)) { ev.preventDefault(); ev.dataTransfer.dropEffect = "copy"; } });
+  editor.addEventListener("drop", ev => {
+    if (!hasFiles(ev)) return; // dragging text around stays normal
+    ev.preventDefault();
+    depth = 0;
+    editor.classList.remove("dropping");
+    insertPhotos(ev.dataTransfer.files);
+  });
+
+  // Paste a photo (a screenshot, or one copied from another page).
+  body.addEventListener("paste", ev => {
+    const files = [...(ev.clipboardData?.files || [])].filter(f => f.type.startsWith("image/"));
+    if (!files.length) return; // ordinary text pastes as usual
+    ev.preventDefault();
+    insertPhotos(files);
+  });
 }
 
 // ---- post fields in the editor ----
