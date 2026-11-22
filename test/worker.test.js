@@ -61,7 +61,7 @@ test("admin needs the admin password", async () => {
   assert.equal((await archie("/admin/users", { method: "POST", form: { username: "x" } })).status, 303);
   assert.equal((await archie("/admin/login", { method: "POST", form: { password: "nope" } })).status, 401);
   assert.equal((await archie("/admin/login", { method: "POST", form: { password: "admin-secret-pw" } })).status, 303);
-  assert.match(await (await archie("/admin")).text(), /add a friend/);
+  assert.match(await (await archie("/admin")).text(), /billing, whole app/);
 });
 
 test("archie adds a friend and gets a starting password", async () => {
@@ -84,7 +84,8 @@ test("friends log in; wrong passwords don't", async () => {
 
 test("ten wrong passwords lock an IP out for a while", async () => {
   const guesser = browser("6.6.6.6");
-  for (let i = 0; i < 10; i++) await guesser("/login", { method: "POST", form: { username: "maya", password: "guess" + i } });
+  // (A made-up username, so no real account gets locked along the way.)
+  for (let i = 0; i < 10; i++) await guesser("/login", { method: "POST", form: { username: "not-a-real-friend", password: "guess" + i } });
   const res = await guesser("/login", { method: "POST", form: { username: "maya", password: mayaPassword } });
   assert.equal(res.status, 429);
 });
@@ -445,4 +446,51 @@ test("costs use Cloudflare's measurements once synced; a failed sync is reported
   } finally {
     delete env.BLOG_BUCKET;
   }
+});
+
+
+test("three wrong passwords lock an account until archie sets a new one", async () => {
+  await archie("/admin/users", { method: "POST", form: { username: "lockme", display_name: "Lock Me", password: "right-password-1" } });
+  const tries = (password, ip) => browser(ip)("/login", { method: "POST", form: { username: "lockme", password } });
+
+  // Wrong tries warn how many are left (from different places: the lock is per account, not per IP).
+  let res = await tries("wrong-1", "15.0.0.1");
+  assert.equal(res.status, 401);
+  assert.match(await res.text(), /2 more wrong tries and the account locks/);
+  // A right password in between resets the count.
+  assert.equal((await tries("right-password-1", "15.0.0.2")).status, 303);
+  await tries("wrong-2", "15.0.0.3");
+  res = await tries("wrong-3", "15.0.0.4");
+  assert.match(await res.text(), /1 more wrong try and the account locks/);
+  res = await tries("wrong-4", "15.0.0.5");
+  assert.equal(res.status, 423);
+  assert.match(await res.text(), /text archie to reset your password/);
+
+  // Locked means locked, even with the right password.
+  res = await tries("right-password-1", "15.0.0.6");
+  assert.equal(res.status, 423);
+  assert.match(await res.text(), /text archie to reset your password/);
+
+  // Archie's dashboard flags it; setting a password unlocks it.
+  let page = await (await archie("/admin")).text();
+  assert.match(page, /<h2>locked out<\/h2>[\s\S]*<b>lockme<\/b>/);
+  assert.match(page, /<div class="alert"><dt>locked accounts<\/dt><dd>1<\/dd>/);
+  const { id } = await env.DB.prepare("SELECT id FROM users WHERE username = 'lockme'").first();
+  page = await (await archie(`/admin/users/${id}/password`, { method: "POST", form: { password: "brand-new-pass-2" } })).text();
+  assert.match(page, /their account is unlocked/);
+  assert.ok(!page.includes("<h2>locked out</h2>"));
+  assert.equal((await tries("right-password-1", "15.0.0.7")).status, 401); // old password is gone
+  assert.equal((await tries("brand-new-pass-2", "15.0.0.8")).status, 303);
+  const row = await env.DB.prepare("SELECT failed_logins, locked_at FROM users WHERE id = ?").bind(id).first();
+  assert.deepEqual(row, { failed_logins: 0, locked_at: null });
+});
+
+test("the admin dashboard shows billing for the whole app", async () => {
+  const page = await (await archie("/admin")).text();
+  assert.match(page, /<dt>whole app, all time<\/dt><dd>\$\d+\.\d\d<\/dd>/);
+  assert.match(page, /<h2>billing, whole app<\/h2>/);
+  assert.match(page, /running total/);
+  // cost-test's domain (paid yearly since 2024-01-15) shows up in the domains column.
+  assert.match(page, /<td>all time<\/td><td>[^<]*<\/td><td>\$\d+\.\d\d<\/td>/);
+  assert.ok(!page.includes("<td>all time</td><td>$0.00</td><td>$0.00</td>"));
 });

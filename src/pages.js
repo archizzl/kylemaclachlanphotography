@@ -25,13 +25,13 @@ export function simplePage(title, message) {
   return shell(title, `<main class="narrow"><h1>${e(title)}</h1><p>${message}</p><p><a href="/">home</a></p></main>`);
 }
 
-export function loginPage({ message = "", username = "" } = {}) {
+export function loginPage({ message = "", username = "", locked = false } = {}) {
   return shell(
     "log in",
     `<main class="narrow">
 <h1>log in</h1>
 <p class="muted">use the username and password Archie gave you.</p>
-${message ? `<p class="problem">${e(message)}</p>` : ""}
+${message ? `<p class="problem${locked ? " locked" : ""}" role="alert">${e(message)}</p>` : ""}
 <form method="post" action="/login" class="stack">
   <label>username <input name="username" autocomplete="username" autocapitalize="none" spellcheck="false" required value="${e(username)}"></label>
   <label>password <input name="password" type="password" autocomplete="current-password" required></label>
@@ -90,30 +90,71 @@ ${rows ? `<table class="users usage"><thead><tr><th>month</th><th>source</th><th
 </section>`;
 }
 
-export function adminPage(users, note = null, usage = null) {
+const shortDate = iso => (iso ? new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" }) : "");
+
+function passwordForm(u, { label = "set password", wide = false } = {}) {
+  return `<form method="post" action="/admin/users/${u.id}/password" class="pw${wide ? " wide" : ""}">
+      <input name="password" type="text" placeholder="new password, or blank to make one" autocomplete="off" aria-label="new password for ${e(u.username)}">
+      <button type="submit">${label}</button>
+    </form>`;
+}
+
+function statusOf(u) {
+  if (u.locked_at) return `<span class="draft">locked</span><br><span class="muted">since ${e(shortDate(u.locked_at))}</span>`;
+  if (u.disabled) return '<span class="draft">switched off</span>';
+  if (u.failed_logins) return `active<br><span class="muted">${u.failed_logins} wrong ${u.failed_logins === 1 ? "try" : "tries"}</span>`;
+  return "active";
+}
+
+// The whole app's costs: every blog's storage share and domains, month by month, with a running total.
+function billingSection(billing) {
+  const rows = billing.months
+    .filter(m => m.partial || m.total > 0 || m.fullPrice > 0)
+    .map(
+      m => `<tr${m.estimated ? ' class="est"' : ""}>
+  <td>${monthName(m.month, m.partial)}${m.estimated ? " · est." : ""}</td><td>${money(m.storage)}</td><td>${money(m.domains)}</td>
+  <td><b>${money(m.total)}</b></td><td>${money(m.cumulative)}</td><td class="muted">${money(m.fullPrice)}</td></tr>`
+    )
+    .join("\n");
+  const t = billing.allTime;
+  return `<section>
+<h2>billing, whole app</h2>
+<p class="muted">every blog added together: each one's share of the blog bucket's R2 (after cloudflare's free allowance) plus the domains you pay for. "running total" is everything up to and including that month. it doesn't include your other sites' buckets (they're in the R2 table at the bottom) or a Workers plan, if you pay for one.</p>
+${rows
+  ? `<table class="users usage"><thead><tr><th>month</th><th>storage</th><th>domains</th><th>total</th><th>running total</th><th>storage at full price</th></tr></thead>
+<tbody>${rows}</tbody>
+<tfoot><tr><td>all time</td><td>${money(t.storage)}</td><td>${money(t.domains)}</td><td><b>${money(t.total)}</b></td><td></td><td class="muted">${money(t.fullPrice)}</td></tr></tfoot></table>`
+  : "<p>nothing yet.</p>"}
+</section>`;
+}
+
+// data: { users, billing, usage }. note: { text, password?, problem? } shown at the top after an action.
+export function adminPage({ users, billing, usage }, note = null) {
+  const locked = users.filter(u => u.locked_at);
+  const thisMonth = billing.months.find(m => m.partial);
   const rows = users
     .map(
-      u => `<tr class="${u.disabled ? "off" : ""}">
+      u => `<tr class="${u.disabled ? "off" : ""}${u.locked_at ? " is-locked" : ""}">
   <td><b>${e(u.username)}</b>${u.display_name ? `<br><span class="muted">${e(u.display_name)}</span>` : ""}</td>
+  <td>${statusOf(u)}</td>
   <td>${u.published} published<br><span class="muted">${u.drafts} draft${u.drafts === 1 ? "" : "s"}</span></td>
   <td>${u.files} file${u.files === 1 ? "" : "s"}<br><span class="muted">${kb(u.bytes || 0)}</span></td>
-  <td>${money(u.cost?.total)}<br><span class="muted">${money(u.cost?.fullPrice)} at full price</span></td>
-  <td>${u.disabled ? '<span class="draft">disabled</span>' : "active"}</td>
+  <td>${money(u.cost?.total)}${u.domain ? `<br><span class="muted">${e(u.domain)}</span>` : ""}</td>
   <td class="actions">
-    <form method="post" action="/admin/users/${u.id}/password">
-      <input name="password" type="text" placeholder="new password (blank = make one)" autocomplete="off" aria-label="new password for ${e(u.username)}">
-      <button type="submit">reset password</button>
-    </form>
-    <form method="post" action="/admin/users/${u.id}/domain" class="domain">
-      <input name="domain" value="${e(u.domain || "")}" placeholder="their-domain.com" aria-label="domain for ${e(u.username)}">
-      <input name="cost" value="${u.domain_cost_cents ? (u.domain_cost_cents / 100).toFixed(2) : ""}" placeholder="$/year" aria-label="yearly cost" style="width:80px">
-      <input name="since" type="date" value="${e(u.domain_since || "")}" aria-label="first paid on" style="width:140px">
-      <button type="submit">save domain</button>
-    </form>
-    <form method="post" action="/admin/users/${u.id}/disabled">
-      <input type="hidden" name="disabled" value="${u.disabled ? 0 : 1}">
-      <button type="submit">${u.disabled ? "enable" : "disable"}</button>
-    </form>
+    ${passwordForm(u, { label: u.locked_at ? "set &amp; unlock" : "set password" })}
+    <details>
+      <summary>domain, switch off</summary>
+      <form method="post" action="/admin/users/${u.id}/domain" class="domain">
+        <input name="domain" value="${e(u.domain || "")}" placeholder="their-domain.com" aria-label="domain for ${e(u.username)}">
+        <input name="cost" value="${u.domain_cost_cents ? (u.domain_cost_cents / 100).toFixed(2) : ""}" placeholder="$/year" aria-label="yearly cost" style="width:80px">
+        <input name="since" type="date" value="${e(u.domain_since || "")}" aria-label="first paid on" style="width:140px">
+        <button type="submit">save domain</button>
+      </form>
+      <form method="post" action="/admin/users/${u.id}/disabled">
+        <input type="hidden" name="disabled" value="${u.disabled ? 0 : 1}">
+        <button type="submit">${u.disabled ? "switch back on" : "switch off"}</button>
+      </form>
+    </details>
   </td>
 </tr>`
     )
@@ -128,25 +169,46 @@ export function adminPage(users, note = null, usage = null) {
       }</div>`
     : "";
 
+  const lockedHtml = locked.length
+    ? `<section class="attention">
+<h2>locked out</h2>
+<p class="muted">three wrong passwords in a row locks an account. they're told to text you; setting a new password unlocks it.</p>
+<ul class="lockedlist">${locked
+        .map(
+          u => `<li><b>${e(u.username)}</b>${u.display_name ? ` <span class="muted">(${e(u.display_name)})</span>` : ""} <span class="muted">locked ${e(shortDate(u.locked_at))}</span>
+    ${passwordForm(u, { label: "set &amp; unlock", wide: true })}</li>`
+        )
+        .join("")}</ul>
+</section>`
+    : "";
+
   return shell(
-    "admin · friends",
-    `<header class="top"><h1>friends</h1><a class="black_button" href="/admin/logout">log out</a></header>
-<main>
+    "admin",
+    `<header class="top"><h1>admin</h1><a href="/" style="font-size:16px">front page</a><a class="black_button" href="/admin/logout">log out</a></header>
+<main class="wide">
 ${noteHtml}
+<dl class="stats">
+  <div><dt>blogs</dt><dd>${users.filter(u => !u.disabled).length}</dd></div>
+  <div><dt>whole app, all time</dt><dd>${money(billing.allTime.total)}</dd></div>
+  <div><dt>this month so far</dt><dd>${money(thisMonth?.total || 0)}</dd></div>
+  <div class="${locked.length ? "alert" : ""}"><dt>locked accounts</dt><dd>${locked.length}</dd></div>
+</dl>
+${lockedHtml}
+${billingSection(billing)}
+<section>
+<h2>accounts</h2>
+<p class="muted">type a new password and press set (or leave it blank and one is made for you). it logs them out everywhere and revokes their agent keys.</p>
+${users.length ? `<table class="users"><thead><tr><th>blog</th><th>status</th><th>posts</th><th>files</th><th>cost, all time</th><th>password and more</th></tr></thead><tbody>${rows}</tbody></table>` : "<p>no one yet.</p>"}
+</section>
 <section>
 <h2>add a friend</h2>
 <form method="post" action="/admin/users" class="row">
-  <label>username <input name="username" required pattern="[a-z0-9][a-z0-9\-]{0,28}[a-z0-9]" autocapitalize="none" spellcheck="false" placeholder="maya"></label>
+  <label>username <input name="username" required pattern="[a-z0-9][a-z0-9\\-]{0,28}[a-z0-9]" autocapitalize="none" spellcheck="false" placeholder="maya"></label>
   <label>blog name <input name="display_name" placeholder="maya's notebook"></label>
   <label>password <input name="password" type="text" autocomplete="off" placeholder="blank = make one"></label>
   <button type="submit">add</button>
 </form>
 <p class="muted">they log in at <a href="/login">/login</a>. their files go to <code>cdn…/username/</code>.</p>
-<p class="muted">costs: R2 storage after Cloudflare's free 10 GB a month (shared by the whole account), plus any domain you pay for them. "full price" is before the free allowance. leave a domain blank to remove it.</p>
-</section>
-<section>
-<h2>everyone</h2>
-${users.length ? `<table class="users"><thead><tr><th>blog</th><th>posts</th><th>files</th><th>cost, all time</th><th>status</th><th></th></tr></thead><tbody>${rows}</tbody></table>` : "<p>no one yet.</p>"}
 </section>
 ${usageSection(usage)}
 </main>`,

@@ -40,7 +40,11 @@ One Cloudflare Worker (`blog-cdn`) on the Reaction Future Institute account, plu
   - Keys can't change the password or manage keys.
   - An admin password reset revokes them.
   - The guide agents follow is `public/agents.md` (served at `/agents.md`, with `/llms.txt` pointing to it, and linked from the front page). **Update it whenever the API or embed options change.**
-- **Archie** manages friends at `/admin`, using the `ADMIN_PASSWORD` Worker secret. From there he can add a friend (a password is made up if left blank and shown once), reset a password (which logs them out everywhere), and switch an account off or back on.
+- **Archie's dashboard** is at `/admin`, using the `ADMIN_PASSWORD` Worker secret.
+  - **Totals at the top**: blogs, the whole app's cost all time and this month, and locked accounts.
+  - **Billing, whole app**: every blog's R2 share and domains added together by month, with a running total.
+  - **Accounts**: set any password in one step (leave it blank and one is made and shown once), add domains, or switch an account off.
+  - **Lockout**: **three wrong passwords in a row lock an account**, even against the right password. The login page warns how many tries are left, then says "text archie to reset your password". A "locked out" box at the top of `/admin` sets a new password, which unlocks it. A separate limit locks out an IP for 15 minutes after ten wrong passwords on any accounts.
 - **Posts** are stored in D1 (`migrations/`). The markdown is rendered to HTML when saved (`src/markdown.js`, markdown-it with HTML turned off, so anything typed as HTML shows as text). Each published post is also copied to R2 as `<user>/posts/<slug>.md`.
 - **Files** go to the R2 bucket `blog-cdn-files` as `<user>/<name>`. They're served straight from the bucket's own domain, **`cdn.kylemaclachlanphotography.org`**, and never pass through the Worker.
   - Files are never overwritten. Uploading the same name again gets a new name, so images can be cached forever.

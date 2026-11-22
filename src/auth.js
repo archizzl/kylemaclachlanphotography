@@ -11,6 +11,8 @@ export const SESSION_COOKIE = "kmp_session";
 export const ADMIN_COOKIE = "kmp_admin";
 export const SESSION_DAYS = 30;
 export const MAX_FAILS = 10; // wrong passwords per IP per 15 minutes
+export const MAX_ACCOUNT_FAILS = 3; // wrong passwords in a row before an account locks
+export const LOCKED_MESSAGE = "too many wrong passwords. text archie to reset your password.";
 const ITERATIONS = 100000; // the most Workers' PBKDF2 allows
 const enc = new TextEncoder();
 

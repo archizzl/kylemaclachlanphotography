@@ -212,3 +212,27 @@ export function storedNow(data, userId) {
   const sum = kind => live.filter(i => i.kind === kind).reduce((s, i) => s + i.bytes, 0);
   return { files: sum("files"), text: sum("text") };
 }
+
+// The whole app: every blog's months added together, oldest to newest with a running total.
+// reports: costReport results, one per blog. Returns months newest first.
+export function appBilling(reports) {
+  const byMonth = {};
+  for (const r of reports) {
+    for (const m of r.months) {
+      const b = (byMonth[m.month] ??= { month: m.month, partial: m.partial, storage: 0, domains: 0, total: 0, fullPrice: 0, estimated: false });
+      b.storage += m.storageCharged;
+      b.domains += m.domain;
+      b.total += m.total;
+      b.fullPrice += m.fullPrice;
+      if (m.source === "estimated" && (m.gbMonths > 0 || m.uploads > 0)) b.estimated = true;
+    }
+  }
+  const months = Object.values(byMonth).sort((a, b) => a.month.localeCompare(b.month));
+  let running = 0;
+  for (const m of months) m.cumulative = running += m.total;
+  const sum = k => months.reduce((s, m) => s + m[k], 0);
+  return {
+    months: months.reverse(),
+    allTime: { total: running, storage: sum("storage"), domains: sum("domains"), fullPrice: sum("fullPrice") },
+  };
+}

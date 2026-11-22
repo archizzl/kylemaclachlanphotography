@@ -149,3 +149,22 @@ details.explain dd { margin: 2px 0 0 16px; color: #333; }
 table.usage td { white-space: nowrap; }
 table.usage tr.est td { color: #888; font-style: italic; }
 table.costs tr.est td { color: #888; font-style: italic; }
+
+/* admin dashboard */
+main.wide { max-width: 1100px; }
+dl.stats { display: flex; flex-wrap: wrap; gap: 10px 40px; margin: 10px 0 6px; padding: 0 0 14px; border-bottom: 1px solid #000; }
+dl.stats dt { font-size: 15px; color: #666; }
+dl.stats dd { margin: 0; font-size: 30px; }
+dl.stats .alert dd, dl.stats .alert dt { color: #b53a1a; }
+section.attention { border: 1px solid #b53a1a; border-radius: 3px; padding: 0 14px 10px; margin: 18px 0; }
+section.attention h2 { color: #b53a1a; }
+ul.lockedlist { list-style: none; padding: 0; margin: 0; }
+ul.lockedlist li { padding: 8px 0; border-top: 1px solid #eee; }
+form.pw { display: flex; gap: 6px; flex-wrap: wrap; margin: 0 0 6px; }
+form.pw input { width: 240px; font-size: 15px; }
+form.pw.wide { margin-top: 6px; }
+form.pw.wide input { width: 300px; }
+tr.is-locked td { background: #fff5f2; }
+td.actions details summary { cursor: pointer; font-size: 14px; color: #666; }
+td.actions details form { margin-top: 6px; }
+.problem.locked { font-weight: bold; }

@@ -2,7 +2,7 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { costReport, domainCharges, gbMonths, monthsSince, nextRenewal } from "../src/costs.js";
+import { appBilling, costReport, domainCharges, gbMonths, monthsSince, nextRenewal } from "../src/costs.js";
 import { cleanDomain } from "../src/rules.js";
 
 const T = s => Date.parse(s);
@@ -61,4 +61,18 @@ test("domains are checked", () => {
   assert.ok(cleanDomain({ domain: "not a domain", cost: 1, since: "2025-01-01" })[1]);
   assert.ok(cleanDomain({ domain: "maya.com", cost: "ten", since: "2025-01-01" })[1]);
   assert.ok(cleanDomain({ domain: "maya.com", cost: 10 })[1]);
+});
+
+test("whole-app billing adds every blog up, with a running total", () => {
+  const now = T("2026-11-22");
+  const a = costReport({ mine: [], everyone: [], myUploads: [], allUploads: [], domain: { since: "2025-03-10", cents: 1000 }, start: T("2025-03-01"), now });
+  const b = costReport({ mine: [], everyone: [], myUploads: [], allUploads: [], domain: { since: "2026-03-20", cents: 500 }, start: T("2026-01-01"), now });
+  const bill = appBilling([a, b]);
+  near(bill.allTime.total, 10 + 10 + 5, "two years of one domain plus one of another");
+  near(bill.allTime.domains, 25, "domains");
+  const mar26 = bill.months.find(m => m.month === "2026-03");
+  near(mar26.total, 15, "both renewals in March 2026");
+  near(mar26.cumulative, 25, "running total by then");
+  near(bill.months.find(m => m.month === "2025-03").cumulative, 10, "running total at the start");
+  assert.equal(bill.months[0].month, "2026-11"); // newest first
 });

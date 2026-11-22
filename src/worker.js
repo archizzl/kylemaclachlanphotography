@@ -16,14 +16,14 @@
 
 import {
   adminCookie, checkPassword, clearAdminCookie, clearFails, createAgentKey, currentUser, endAllSessions, endSession,
-  generatePassword, hashPassword, isAdmin, lockedOut, MAX_AGENT_KEYS, passwordProblem, recordFail, revokeAllAgentKeys, same,
+  generatePassword, hashPassword, isAdmin, LOCKED_MESSAGE, lockedOut, MAX_ACCOUNT_FAILS, MAX_AGENT_KEYS, passwordProblem, recordFail, revokeAllAgentKeys, same,
   startSession, userFromAgentKey,
 } from "./auth.js";
 import { renderInline, renderMarkdown } from "./markdown.js";
 import { cacheControlFor, checkUpload, cleanDomain, cleanFileText, cleanPost, cleanSettings, contentMatches, isImage, usernameProblem } from "./rules.js";
 import { jsonFeed, postMarkdownFile, postMdKey, publicImage, publicPost, publicUser, rssFeed } from "./feeds.js";
 import { homePage, loadHome } from "./home.js";
-import { costReport, loadCostData, nextRenewal, RATES, reportFor, storedNow } from "./costs.js";
+import { appBilling, costReport, loadCostData, nextRenewal, RATES, reportFor, storedNow } from "./costs.js";
 import { measuredByMonth, syncR2Usage, syncStatus } from "./r2usage.js";
 import { cleanFieldDefs, cleanPostFields, listQuery, parseJson } from "./fields.js";
 import { adminLoginPage, adminPage, dashboardPage, loginPage, simplePage } from "./pages.js";
@@ -129,12 +129,28 @@ async function login(request, env) {
   const password = String(form.get("password") || "");
   const user = await env.DB.prepare("SELECT * FROM users WHERE username = ?").bind(username).first();
   const ok = await checkPassword(password, user?.password_hash);
+
+  // A locked account stays locked, even with the right password, until Archie sets a new one.
+  if (user?.locked_at) return html(loginPage({ message: LOCKED_MESSAGE, username, locked: true }), 423);
+
   if (!user || !ok) {
     await recordFail(env, request);
-    return html(loginPage({ message: "That username and password didn't match.", username }), 401);
+    if (!user) return html(loginPage({ message: "That username and password didn't match.", username }), 401);
+    const row = await env.DB.prepare("UPDATE users SET failed_logins = failed_logins + 1 WHERE id = ? RETURNING failed_logins").bind(user.id).first();
+    const fails = row?.failed_logins ?? MAX_ACCOUNT_FAILS;
+    if (fails >= MAX_ACCOUNT_FAILS) {
+      await env.DB.prepare("UPDATE users SET locked_at = ? WHERE id = ?").bind(now(), user.id).run();
+      return html(loginPage({ message: LOCKED_MESSAGE, username, locked: true }), 423);
+    }
+    const left = MAX_ACCOUNT_FAILS - fails;
+    return html(
+      loginPage({ message: `That username and password didn't match. ${left} more wrong ${left === 1 ? "try" : "tries"} and the account locks.`, username }),
+      401
+    );
   }
   if (user.disabled) return html(loginPage({ message: "This account is switched off. Ask Archie.", username }), 403);
   await clearFails(env, request);
+  if (user.failed_logins) await env.DB.prepare("UPDATE users SET failed_logins = 0 WHERE id = ?").bind(user.id).run();
   return redirect("/dashboard", await startSession(env, request, user.id));
 }
 
@@ -160,11 +176,11 @@ async function admin(path, method, request, env) {
     return redirect("/admin");
   }
 
-  if (path === "/admin" && method === "GET") return html(adminPage(await listUsers(env), null, await accountUsage(env)));
+  if (path === "/admin" && method === "GET") return adminView(env);
   if (path === "/admin/sync-usage" && method === "POST") {
     const s = await syncR2Usage(env);
     const note = s.ok ? { text: `got ${s.days} days of usage from Cloudflare.` } : { text: `couldn't get usage from Cloudflare: ${s.error}`, problem: true };
-    return html(adminPage(await listUsers(env), note, await accountUsage(env)));
+    return adminView(env, note);
   }
 
   if (path === "/admin/users" && method === "POST") {
@@ -177,11 +193,11 @@ async function admin(path, method, request, env) {
       usernameProblem(username) ||
       passwordProblem(password) ||
       ((await env.DB.prepare("SELECT 1 FROM users WHERE username = ?").bind(username).first()) ? `There's already a friend called ${username}.` : null);
-    if (problem) return html(adminPage(await listUsers(env), { text: problem, problem: true }), 400);
+    if (problem) return adminView(env, { text: problem, problem: true }, 400);
     await env.DB.prepare("INSERT INTO users (username, display_name, password_hash, created_at) VALUES (?, ?, ?, ?)")
       .bind(username, displayName, await hashPassword(password), now())
       .run();
-    return html(adminPage(await listUsers(env), { text: `added ${username}.`, password }));
+    return adminView(env, { text: `added ${username}.`, password });
   }
 
   const m = path.match(/^\/admin\/users\/(\d+)\/(password|disabled|domain)$/);
@@ -191,37 +207,47 @@ async function admin(path, method, request, env) {
     const form = await request.formData();
     if (m[2] === "domain") {
       const [d, problem] = cleanDomain({ domain: form.get("domain"), cost: form.get("cost"), since: form.get("since") });
-      if (problem) return html(adminPage(await listUsers(env), { text: problem, problem: true }), 400);
+      if (problem) return adminView(env, { text: problem, problem: true }, 400);
       await env.DB.prepare("UPDATE users SET domain = ?, domain_cost_cents = ?, domain_since = ? WHERE id = ?").bind(d.domain, d.cents, d.since, user.id).run();
-      return html(adminPage(await listUsers(env), { text: d.domain ? `${user.username}'s domain is ${d.domain}.` : `removed ${user.username}'s domain.` }));
+      return adminView(env, { text: d.domain ? `${user.username}'s domain is ${d.domain}.` : `removed ${user.username}'s domain.` });
     }
     if (m[2] === "password") {
       const typed = String(form.get("password") || "").trim();
       const password = typed || generatePassword();
       const problem = passwordProblem(password);
-      if (problem) return html(adminPage(await listUsers(env), { text: problem, problem: true }), 400);
-      await env.DB.prepare("UPDATE users SET password_hash = ? WHERE id = ?").bind(await hashPassword(password), user.id).run();
+      if (problem) return adminView(env, { text: problem, problem: true }, 400);
+      // A new password also unlocks the account.
+      await env.DB.prepare("UPDATE users SET password_hash = ?, failed_logins = 0, locked_at = NULL WHERE id = ?").bind(await hashPassword(password), user.id).run();
       await endAllSessions(env, user.id);
       await revokeAllAgentKeys(env, user.id);
-      return html(adminPage(await listUsers(env), { text: `new password for ${user.username}. they've been logged out everywhere, and their agent keys are revoked.`, password }));
+      return adminView(env, {
+        text: `new password for ${user.username}.${user.locked_at ? " their account is unlocked." : ""} they've been logged out everywhere, and their agent keys are revoked.`,
+        password,
+      });
     }
     const disabled = form.get("disabled") === "1" ? 1 : 0;
     await env.DB.prepare("UPDATE users SET disabled = ? WHERE id = ?").bind(disabled, user.id).run();
     if (disabled) await endAllSessions(env, user.id);
-    return html(
-      adminPage(await listUsers(env), {
-        text: disabled
-          ? `${user.username} is switched off. they can't log in, and their posts and feeds are hidden. their files stay on the CDN.`
-          : `${user.username} is back on.`,
-      })
-    );
+    return adminView(env, {
+      text: disabled
+        ? `${user.username} is switched off. they can't log in, and their posts and feeds are hidden. their files stay on the CDN.`
+        : `${user.username} is back on.`,
+    });
   }
   return redirect("/admin");
+}
+
+// Renders the admin dashboard: billing for the whole app, locked accounts, everyone, R2 usage.
+async function adminView(env, note = null, status = 200) {
+  const users = await listUsers(env);
+  const billing = appBilling(users.map(u => u.report));
+  return html(adminPage({ users, billing, usage: await accountUsage(env) }, note), status);
 }
 
 async function listUsers(env) {
   const { results } = await env.DB.prepare(
     `SELECT u.id, u.username, u.display_name, u.disabled, u.created_at, u.domain, u.domain_cost_cents, u.domain_since,
+       u.failed_logins, u.locked_at,
        (SELECT COUNT(*) FROM posts p WHERE p.user_id = u.id AND p.published = 1) AS published,
        (SELECT COUNT(*) FROM posts p WHERE p.user_id = u.id AND p.published = 0) AS drafts,
        (SELECT COUNT(*) FROM files f WHERE f.user_id = u.id AND f.deleted_at IS NULL) AS files,
@@ -232,7 +258,10 @@ async function listUsers(env) {
   const data = await loadCostData(env);
   const measured = await measuredByMonth(env.DB, env.BLOG_BUCKET);
   const now = Date.now();
-  for (const u of results) u.cost = reportFor(u, data, { otherGB: Number(env.OTHER_STORAGE_GB) || 0, measured, now }).allTime;
+  for (const u of results) {
+    u.report = reportFor(u, data, { otherGB: Number(env.OTHER_STORAGE_GB) || 0, measured, now });
+    u.cost = u.report.allTime;
+  }
   return results;
 }
 
