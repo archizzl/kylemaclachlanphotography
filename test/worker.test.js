@@ -383,7 +383,7 @@ test("each blog sees its own costs; deleted files stay on record; admin can add 
   assert.equal(u.allTime.total, 0); // far inside the free allowance
   assert.ok(u.allTime.fullPrice > 0);
   assert.equal(u.domain, null);
-  assert.equal(u.hostName, "RFR");
+  assert.equal(u.hostName, "Reaction Future Institute");
 
   // Deleting a file: gone from lists, still counted for the time it was stored, name stays taken.
   await me(`/api/files/${file.id}`, { method: "DELETE" });
@@ -395,7 +395,7 @@ test("each blog sees its own costs; deleted files stay on record; admin can add 
   const again = (await (await me("/api/files?name=a.jpg", { method: "PUT", raw: jpg, headers: { "content-type": "image/jpeg", "content-length": "1000" } })).json()).file;
   assert.notEqual(again.key, "cost-test/a.jpg");
 
-  // Archie records a domain paid for through RFR.
+  // Archie records a domain paid for through Reaction Future Institute.
   const { id } = await env.DB.prepare("SELECT id FROM users WHERE username = 'cost-test'").first();
   const page = await (await archie(`/admin/users/${id}/domain`, { method: "POST", form: { domain: "Cost-Test.com", cost: "10.44", since: "2024-01-15" } })).text();
   assert.match(page, /cost-test&#39;s domain is cost-test\.com/);

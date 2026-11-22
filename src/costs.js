@@ -1,6 +1,6 @@
 // What each blog costs, month by month: storage at Cloudflare R2's prices, minus each month's free
 // allowance (shared across the whole Cloudflare account), plus a domain if one is paid for
-// through RFR.
+// through Reaction Future Institute.
 //
 // Storage is added up from when each file (or post) was stored to when it was deleted, the same
 // way R2 bills: GB-months, i.e. the average amount stored over the month.

@@ -257,7 +257,7 @@ async function api(path, method, request, env, user, url) {
       ...report,
       stored: storedNow(data, user.id),
       rates: RATES,
-      hostName: env.HOST_NAME || "RFR",
+      hostName: env.HOST_NAME || "Reaction Future Institute",
       domain: user.domain
         ? { name: user.domain, yearly: user.domain_cost_cents / 100, since: user.domain_since, renews: nextRenewal(user.domain_since, now) }
         : null,

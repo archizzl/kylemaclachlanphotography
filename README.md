@@ -28,7 +28,7 @@ One Cloudflare Worker (`blog-cdn`) on the Reaction Future Institute account, plu
   - Cloudflare's free 10 GB-months and 1M uploads each month are shared across the whole account. A blog only pays its share of anything over that.
   - **`OTHER_STORAGE_GB`** in `wrangler.jsonc` is what the account's *other* buckets hold, since the free allowance counts them too. Update it now and then with `npx wrangler r2 bucket info <bucket>`.
   - Deleted files keep their row (`deleted_at`), so past months stay right.
-  - **Domains**: at `/admin`, Archie can record a friend's domain paid for through RFR (`HOST_NAME`), with its yearly price and the date it was first paid for. It's charged in that month and every anniversary, and the friend sees it with its next renewal date.
+  - **Domains**: at `/admin`, Archie can record a friend's domain paid for through Reaction Future Institute (`HOST_NAME`), with its yearly price and the date it was first paid for. It's charged in that month and every anniversary, and the friend sees it with its next renewal date.
 - **Agent keys**: a friend can make a revocable key (settings → "let an AI agent set up your blog").
   - An AI agent uses it as `Authorization: Bearer kmp_…` on `/api/*`, without the friend's password.
   - Keys can't change the password or manage keys.

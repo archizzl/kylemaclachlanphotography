@@ -29,7 +29,7 @@
     // `npx wrangler r2 bucket info <bucket>` now and then.
     "OTHER_STORAGE_GB": "0.1",
     // Who domains are registered and paid for through, as friends see it.
-    "HOST_NAME": "RFR"
+    "HOST_NAME": "Reaction Future Institute"
   },
   "d1_databases": [
     {
