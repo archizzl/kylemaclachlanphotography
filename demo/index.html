@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>embed demo</title>
+<style>
+  body { font-family: Georgia, serif; max-width: 640px; margin: 30px auto; padding: 0 16px; background: #fbf7ef; }
+  header { border-bottom: 1px solid #000; margin-bottom: 20px; }
+</style>
+</head>
+<body>
+<!-- A stand-in for a friend's own site, on a different origin from the blog server.
+     Run with the blog-cdn-demo launch config (port 8128); open ?user=<name>&post=<slug>. -->
+<header><h1>a friend's site</h1></header>
+<div id="slot"></div>
+<script>
+  const q = new URLSearchParams(location.search);
+  const s = document.createElement("script");
+  s.src = (q.get("server") || "http://localhost:8127") + "/embed.js";
+  s.dataset.user = q.get("user") || "test";
+  if (q.get("post")) s.dataset.post = q.get("post");
+  else s.dataset.list = q.get("list") || "10";
+  document.getElementById("slot").append(s);
+</script>
+</body>
+</html>
