@@ -15,7 +15,19 @@ One Cloudflare Worker (`blog-cdn`) on the Reaction Future Institute account, plu
 - **Friends** log in at `/login` and use the dashboard at `/dashboard` (`public/app/app.js`):
   - **posts**: a markdown editor with a live preview, an "insert photo" button, and save draft, publish or unpublish.
   - **files**: drag-and-drop upload, copy link and delete. Photos also get **describe** (alt text and an optional caption) and **embed code** (a live embed, or a plain `<img>` for sites that block scripts). You can also import a `.md` or `.txt` file as a draft post.
-  - **settings**: name, site address, an optional post address pattern (used for feed links), and change password.
+  - **settings**:
+    - blog name, site address, and an optional post address pattern (used for feed links);
+    - **post fields** and **agent keys** (both below);
+    - change password.
+- **Post fields** (`src/fields.js`): each blog designs its own, up to 10.
+  - Kinds: `tags` (picked from a list, e.g. emotions), `number` (can count up by itself), and `text` (e.g. where it was written).
+  - Values show under each post's title in embeds and on the front page, and tags become RSS categories.
+  - Lists can use them: `?filter=<key>:<value>` and `?sort=<key>` in the JSON API, and `data-filter`, `data-sort`, `data-group` and `data-menu` in embeds.
+- **Agent keys**: a friend can make a revocable key (settings → "let an AI agent set up your blog").
+  - An AI agent uses it as `Authorization: Bearer kmp_…` on `/api/*`, without the friend's password.
+  - Keys can't change the password or manage keys.
+  - An admin password reset revokes them.
+  - The guide agents follow is `public/agents.md` (served at `/agents.md`, with `/llms.txt` pointing to it, and linked from the front page). **Update it whenever the API or embed options change.**
 - **Archie** manages friends at `/admin`, using the `ADMIN_PASSWORD` Worker secret. From there he can add a friend (a password is made up if left blank and shown once), reset a password (which logs them out everywhere), and switch an account off or back on.
 - **Posts** are stored in D1 (`migrations/`). The markdown is rendered to HTML when saved (`src/markdown.js`, markdown-it with HTML turned off, so anything typed as HTML shows as text). Each published post is also copied to R2 as `<user>/posts/<slug>.md`.
 - **Files** go to the R2 bucket `blog-cdn-files` as `<user>/<name>`. They're served straight from the bucket's own domain, **`cdn.kylemaclachlanphotography.org`**, and never pass through the Worker.
@@ -57,7 +69,7 @@ npm test         # unit tests + the real Worker against a throwaway local D1/R2
   - `xenolab`: "synthetic tenderness", xenofeminist photo and writing.
 
   Their local passwords are in the script. Then start the `blog-cdn-demo` launch config (port 8128) and open:
-  - http://localhost:8128/poetry/: Comic Sans notebook paper, restyling the embeds' default look.
+  - http://localhost:8128/poetry/: Comic Sans notebook paper. It shows post fields: emotion tags in their own colors, a filter menu, a "by feeling" view (`?by=feeling`), numbered poems, and where each was written.
   - http://localhost:8128/xeno/: dark acid-and-violet grid. Uses `data-style="none"` and styles everything itself.
 
   Both are plain HTML files in `demo/` that use the same embed codes a friend would paste.

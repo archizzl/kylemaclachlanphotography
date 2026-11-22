@@ -40,6 +40,14 @@ async function copy(text, what = "copied") {
   try { await navigator.clipboard.writeText(text); toast(what); } catch { prompt("copy this:", text); }
 }
 
+// "No. 3 · tender, hopeful · the 14 bus stop": a post's field values in the blog's field order.
+function fieldSummary(values = {}) {
+  return (me?.fields || [])
+    .filter(d => values[d.key] !== undefined)
+    .map(d => (d.kind === "tags" ? values[d.key].join(", ") : d.kind === "number" ? `${d.name} ${values[d.key]}` : values[d.key]))
+    .join(" · ");
+}
+
 const kb = n => (n >= 1048576 ? `${(n / 1048576).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1024))} KB`);
 const embedOrigin = origin;
 
@@ -120,7 +128,8 @@ async function postsView() {
   const items = posts
     .map(
       p => `<li>
-        <div class="grow"><a href="#edit/${p.id}">${esc(p.title)}</a><time>${esc(p.date)}</time></div>
+        <div class="grow"><a href="#edit/${p.id}">${esc(p.title)}</a><time>${esc(p.date)}</time>
+          ${fieldSummary(p.fields) ? `<div class="muted">${esc(fieldSummary(p.fields))}</div>` : ""}</div>
         ${p.published ? '<span class="live">published</span>' : '<span class="draft">draft</span>'}
         <div class="buttons">
           ${p.published ? `<button data-embed="${p.id}">embed code</button>` : ""}
@@ -159,6 +168,7 @@ async function editView(id) {
       <label style="flex:1 1 140px">date <input id="date" type="date" value="${esc(post.date)}"></label>
     </div>
     <label class="muted" style="margin-top:8px">address <input id="slug" value="${esc(post.slug)}" placeholder="my-first-post" spellcheck="false" autocapitalize="none"></label>
+    ${fieldInputs(me.fields || [], post.fields || {}, isNew)}
     <div class="toolbar">
       <button id="img">insert photo</button>
       <input id="imgfile" type="file" accept="image/*" hidden>
@@ -193,11 +203,12 @@ async function editView(id) {
   title.addEventListener("input", () => { if (!slugTouched) slug.value = slugify(title.value); changed(); });
   slug.addEventListener("input", () => { slugTouched = true; changed(); });
   date.addEventListener("input", changed);
+  $("#postfields")?.addEventListener("input", changed);
   body.addEventListener("input", () => { changed(); clearTimeout(previewTimer); previewTimer = setTimeout(preview, 350); });
   preview();
 
   async function save(published) {
-    const payload = { title: title.value, slug: slug.value, date: date.value, body: body.value, published };
+    const payload = { title: title.value, slug: slug.value, date: date.value, body: body.value, published, fields: readFieldInputs(me.fields || []) };
     status.textContent = "saving…";
     try {
       const saved = (await api(isNew && !post.id ? "posts" : `posts/${post.id}`, { method: isNew && !post.id ? "POST" : "PUT", body: payload })).post;
@@ -206,6 +217,11 @@ async function editView(id) {
       dirty = false;
       slug.value = post.slug;
       slugTouched = true;
+      // Auto numbers are filled in by the server on the first save.
+      for (const d of me.fields || []) {
+        const box = document.getElementById(`field-${d.key}`);
+        if (d.kind === "number" && box && post.fields?.[d.key] !== undefined) box.value = post.fields[d.key];
+      }
       status.textContent = "saved";
       buttons();
       if (location.hash !== `#edit/${post.id}`) history.replaceState(null, "", `#edit/${post.id}`);
@@ -245,6 +261,153 @@ async function editView(id) {
       status.textContent = "";
       toast(err.message, true);
     }
+  };
+}
+
+// ---- post fields in the editor ----
+
+function fieldInputs(defs, values, isNew) {
+  if (!defs.length) return `<p class="muted" style="font-size:15px">want tags, numbers or a location on your posts? set them up in <a href="#settings">settings</a>.</p>`;
+  return `<fieldset id="postfields" class="postfields">${defs
+    .map(d => {
+      const v = values[d.key];
+      if (d.kind === "tags") {
+        return `<div class="pf"><span class="pf-name">${esc(d.name)}</span><span class="chips">${d.choices
+          .map(c => `<label><input type="checkbox" name="${esc(d.key)}" value="${esc(c)}"${(v || []).includes(c) ? " checked" : ""}>${esc(c)}</label>`)
+          .join("")}</span></div>`;
+      }
+      if (d.kind === "number") {
+        const hint = d.auto && isNew ? "counts up by itself" : "";
+        return `<label class="pf"><span class="pf-name">${esc(d.name)}</span><input id="field-${esc(d.key)}" type="number" step="any" value="${v ?? ""}" placeholder="${hint}" style="width:12em"></label>`;
+      }
+      return `<label class="pf"><span class="pf-name">${esc(d.name)}</span><input id="field-${esc(d.key)}" value="${esc(v ?? "")}" style="flex:1"></label>`;
+    })
+    .join("")}</fieldset>`;
+}
+
+function readFieldInputs(defs) {
+  const out = {};
+  for (const d of defs) {
+    if (d.kind === "tags") out[d.key] = [...app.querySelectorAll(`#postfields input[name="${CSS.escape(d.key)}"]:checked`)].map(i => i.value);
+    else {
+      const v = document.getElementById(`field-${d.key}`)?.value ?? "";
+      if (v !== "") out[d.key] = d.kind === "number" ? Number(v) : v;
+    }
+  }
+  return out;
+}
+
+// ---- setting up post fields ----
+
+function fieldsEditor() {
+  let defs = structuredClone(me.fields || []);
+  const box = $("#fields");
+  const kinds = { tags: "tags to pick from", number: "a number", text: "a bit of text (like a place)" };
+
+  function draw() {
+    box.innerHTML = `${defs
+      .map(
+        (d, i) => `<div class="fielddef" data-i="${i}">
+          <div class="row">
+            <label>name <input data-k="name" value="${esc(d.name)}" placeholder="emotion"></label>
+            <label>kind <select data-k="kind">${Object.entries(kinds).map(([k, l]) => `<option value="${k}"${d.kind === k ? " selected" : ""}>${l}</option>`).join("")}</select></label>
+            <span class="buttons"><button type="button" data-move="-1" title="move up"${i ? "" : " disabled"}>↑</button><button type="button" data-move="1" title="move down"${i < defs.length - 1 ? "" : " disabled"}>↓</button><button type="button" class="danger" data-remove>remove</button></span>
+          </div>
+          ${d.kind === "tags" ? `<label>tags, separated by commas <input data-k="choices" value="${esc((d.choices || []).join(", "))}" placeholder="tender, restless, hopeful, giddy"></label>` : ""}
+          ${d.kind === "number" ? `<label class="check"><input type="checkbox" data-k="auto"${d.auto ? " checked" : ""}> number new posts automatically (1, 2, 3…)</label>` : ""}
+          ${d.key ? `<p class="muted" style="margin:4px 0 0;font-size:14px">in embed codes this field is called <code>${esc(d.key)}</code></p>` : ""}
+        </div>`
+      )
+      .join("")}
+      <div class="toolbar"><button type="button" data-add>add a field</button>${defs.length || (me.fields || []).length ? `<button type="button" class="primary" data-save>save fields</button>` : ""}</div>`;
+  }
+  draw();
+
+  box.oninput = box.onchange = ev => {
+    const row = ev.target.closest(".fielddef");
+    const k = ev.target.dataset.k;
+    if (!row || !k) return;
+    const d = defs[row.dataset.i];
+    if (k === "auto") d.auto = ev.target.checked;
+    else if (k === "choices") d.choices = ev.target.value.split(",").map(s => s.trim()).filter(Boolean);
+    else d[k] = ev.target.value;
+    if (k === "kind" && ev.type === "change") draw();
+  };
+  box.onclick = async ev => {
+    const t = ev.target;
+    const row = t.closest(".fielddef");
+    const i = row ? Number(row.dataset.i) : -1;
+    if (t.dataset.add !== undefined) { defs.push({ name: "", kind: "tags", choices: [] }); draw(); box.querySelector(".fielddef:last-of-type input")?.focus(); }
+    if (t.dataset.remove !== undefined) {
+      if (defs[i].key && !confirm(`Remove "${defs[i].name}"? Posts stop showing it.`)) return;
+      defs.splice(i, 1); draw();
+    }
+    if (t.dataset.move) { const j = i + Number(t.dataset.move); [defs[i], defs[j]] = [defs[j], defs[i]]; draw(); }
+    if (t.dataset.save !== undefined) {
+      try {
+        me.fields = (await api("fields", { method: "PUT", body: { fields: defs } })).fields;
+        toast("fields saved");
+        settingsView();
+      } catch (err) { toast(err.message, true); }
+    }
+  };
+}
+
+// Embed codes that use this blog's own fields.
+function fieldExamples() {
+  const tags = (me.fields || []).find(d => d.kind === "tags");
+  const num = (me.fields || []).find(d => d.kind === "number");
+  if (!tags && !num) return "";
+  const s = attrs => `<script src="${embedOrigin}/embed.js" data-user="${username}" data-list="50" ${attrs} async></script>`;
+  const ex = [];
+  if (tags) {
+    ex.push([`your posts grouped under each ${tags.name} tag`, s(`data-group="${tags.key}"`)]);
+    ex.push([`buttons so readers can pick a ${tags.name}`, s(`data-menu="${tags.key}"`)]);
+    ex.push([`only posts tagged "${tags.choices[0]}"`, s(`data-filter="${tags.key}:${tags.choices[0]}"`)]);
+  }
+  if (num) ex.push([`in ${num.name} order (put a - before it for highest first)`, s(`data-sort="${num.key}"`)]);
+  return `<h3 style="font-size:1em;margin:18px 0 4px">using your fields</h3>${ex
+    .map(([label, code]) => `<p style="margin:10px 0 2px">${esc(label)}</p><p style="margin:0"><code>${esc(code)}</code> <button data-copycode="${esc(code)}">copy</button></p>`)
+    .join("")}
+    <p class="muted">you can mix these, like a menu plus number order. each post's values also show under its title (hide them with <code>data-fields="no"</code>).</p>`;
+}
+
+// ---- agent keys ----
+
+async function agentKeys() {
+  const box = $("#keys");
+  const draw = async () => {
+    const { keys } = await api("keys");
+    box.innerHTML = keys.length
+      ? `<ul class="list">${keys
+          .map(
+            k => `<li><div class="grow">${esc(k.label || "agent key")}<div class="muted">made ${esc(k.created_at.slice(0, 10))} · ${k.last_used_at ? `last used ${esc(k.last_used_at.slice(0, 10))}` : "not used yet"}</div></div>
+              <button class="danger" data-revoke="${k.id}">revoke</button></li>`
+          )
+          .join("")}</ul>`
+      : "";
+  };
+  await draw();
+  box.onclick = async ev => {
+    const id = ev.target.dataset.revoke;
+    if (!id || !confirm("Revoke this key? Anything using it stops working straight away.")) return;
+    try { await api(`keys/${id}`, { method: "DELETE" }); toast("revoked"); draw(); } catch (err) { toast(err.message, true); }
+  };
+  $("#newkey").onsubmit = async ev => {
+    ev.preventDefault();
+    try {
+      const { key } = await api("keys", { method: "POST", body: { label: ev.target.label.value } });
+      ev.target.reset();
+      draw();
+      const prompt = `Please set up my blog on ${origin} so it matches my existing blog at <link to your old blog>.
+Read the guide first: ${origin}/agents.md
+My username is ${username} and my agent key is ${key}
+Ask me before publishing anything or changing my own site.`;
+      showSnippet("your agent key", [
+        { label: "give your AI assistant this message", code: prompt, note: "fill in the link to your old blog. the key is only shown now: if you lose it, make a new one." },
+        { label: "just the key", code: key },
+      ], `<p class="muted">anyone with the key can write, publish and delete posts and files as you, so treat it like a password. revoke it below when the agent's done.</p>`);
+    } catch (err) { toast(err.message, true); }
   };
 }
 
@@ -405,9 +568,15 @@ function settingsView() {
       <button type="submit">save</button>
     </form>
 
+    <h2>post fields</h2>
+    <p class="muted">your own tags and details for posts, like an emotion, a number, or where you wrote it. they show up in the post editor.</p>
+    <div id="fields"></div>
+    <p class="muted" style="font-size:15px">renaming a tag doesn't rename it on posts that already have it.</p>
+
     <h2>embedding</h2>
     <p>every published post has an "embed code" button on the posts page. to show your latest posts in one go:</p>
     <p><code>${esc(listSnippet(10))}</code> <button data-act="copylist">copy</button></p>
+    ${fieldExamples()}
     <p>photos have their own "embed code" button on the files page.</p>
 
     <h2>styling</h2>
@@ -427,6 +596,14 @@ function settingsView() {
     <p class="muted">the embed adds a few light defaults (photos fit the page, dates are a bit faded). your css always wins over them. to switch them off completely, add <code>data-style="none"</code> to the script tag. <code>data-title="no"</code> leaves post titles out and <code>data-caption="no"</code> leaves photo captions out.</p>
     <p>feeds for readers: <a href="${esc(me.feeds.rss)}" target="_blank">rss</a> · <a href="${esc(me.feeds.json)}" target="_blank">json feed</a></p>
 
+    <h2>let an AI agent set up your blog</h2>
+    <p>an AI assistant (like Claude) can move your posts over from another blog, set up your tags, and write the code and styling for your own site. make it an agent key, then give it the key and a link to your old blog.</p>
+    <form id="newkey" class="row" style="max-width:560px">
+      <label>what's it for? <input name="label" placeholder="moving my squarespace posts" maxlength="60"></label>
+      <button type="submit">make an agent key</button>
+    </form>
+    <div id="keys"></div>
+
     <h2>change your password</h2>
     <form id="pw" class="stack" style="max-width:420px">
       <input type="text" name="username" value="${esc(username)}" autocomplete="username" hidden>
@@ -436,7 +613,12 @@ function settingsView() {
       <p class="muted">this logs you out on your other devices.</p>
     </form>`
   );
-  app.onclick = ev => { if (ev.target.dataset.act === "copylist") copy(listSnippet(10), "embed code copied"); };
+  app.onclick = ev => {
+    if (ev.target.dataset.act === "copylist") copy(listSnippet(10), "embed code copied");
+    if (ev.target.dataset.copycode) copy(ev.target.dataset.copycode, "embed code copied");
+  };
+  fieldsEditor();
+  agentKeys();
   $("#about").onsubmit = async ev => {
     ev.preventDefault();
     const body = Object.fromEntries(new FormData(ev.target));

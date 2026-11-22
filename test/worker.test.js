@@ -279,3 +279,89 @@ test("the front page shows every blog's published posts, newest first, and their
   await archie(`/admin/users/${id}/disabled`, { method: "POST", form: { disabled: "1" } });
   assert.ok(!(await (await reader("/?after-disable")).text()).includes("Sam &lt;Newest&gt;"));
 });
+
+test("post fields: set up, auto-numbered, filtered, sorted and shown in feeds", async () => {
+  await archie("/admin/users", { method: "POST", form: { username: "june", password: "june-password-1" } });
+  const june = browser("11.0.0.1");
+  await june("/login", { method: "POST", form: { username: "june", password: "june-password-1" } });
+  const defs = (await (await june("/api/fields", { method: "PUT", body: { fields: [
+    { name: "emotion", kind: "tags", choices: ["tender", "restless", "hopeful"] },
+    { name: "no.", kind: "number", auto: true },
+    { name: "written at", kind: "text" },
+  ] } })).json()).fields;
+  assert.deepEqual(defs.map(d => d.key), ["emotion", "no", "written_at"]);
+
+  const post = async (title, fields, date) =>
+    (await (await june("/api/posts", { method: "POST", body: { title, date, fields, published: 1 } })).json()).post;
+  const a = await post("first", { emotion: ["tender"], written_at: "the kitchen" }, "2026-01-01");
+  const b = await post("second", { emotion: ["restless", "hopeful"] }, "2026-02-01");
+  const c = await post("third", { emotion: ["tender", "bogus"], no: 10 }, "2026-03-01");
+  assert.deepEqual([a.fields.no, b.fields.no, c.fields.no], [1, 2, 10]); // counts up unless set
+  assert.deepEqual(c.fields.emotion, ["tender"]);
+  const d = await post("fourth", {}, "2026-04-01");
+  assert.equal(d.fields.no, 11);
+
+  const list = async qs => (await (await june(`/june/posts.json?${qs}`)).json()).posts.map(p => p.title);
+  assert.deepEqual(await list("filter=emotion:tender"), ["third", "first"]);
+  assert.deepEqual(await list("filter=emotion:TENDER&filter=written_at:the%20kitchen"), ["first"]);
+  assert.deepEqual(await list("filter=no:2"), ["second"]);
+  assert.deepEqual(await list("sort=no"), ["first", "second", "third", "fourth"]);
+  assert.deepEqual(await list("sort=-no"), ["fourth", "third", "second", "first"]);
+
+  const data = await (await june("/june/posts.json?x")).json();
+  assert.deepEqual(data.user.fields[0], { key: "emotion", name: "emotion", kind: "tags", choices: ["tender", "restless", "hopeful"] });
+  assert.deepEqual(data.posts.find(p => p.title === "first").fields, { emotion: ["tender"], no: 1, written_at: "the kitchen" });
+  assert.match(await (await june("/june/feed.xml?x")).text(), /<category>restless<\/category>/);
+
+  // Removing a field hides its values everywhere.
+  await june("/api/fields", { method: "PUT", body: { fields: defs.filter(f => f.key !== "written_at") } });
+  assert.deepEqual((await (await june("/june/first.json?y")).json()).post.fields, { emotion: ["tender"], no: 1 });
+  assert.ok((await (await june("/?fields")).text()).includes('<span class="tag">restless</span>'));
+});
+
+test("agent keys work like the person, can be revoked, and can't manage keys or passwords", async () => {
+  await archie("/admin/users", { method: "POST", form: { username: "ana", password: "ana-password-1" } });
+  const ana = browser("12.0.0.1");
+  await ana("/login", { method: "POST", form: { username: "ana", password: "ana-password-1" } });
+  const { key } = await (await ana("/api/keys", { method: "POST", body: { label: "moving my old blog" } })).json();
+  assert.match(key, /^kmp_[A-Za-z0-9_-]{43}$/);
+
+  const agent = (path, opts = {}) =>
+    worker.fetch(
+      new Request(ORIGIN + path, {
+        method: opts.method || "GET",
+        headers: { authorization: `Bearer ${opts.key || key}`, "content-type": "application/json", "cf-connecting-ip": "12.0.0.9" },
+        body: opts.body ? JSON.stringify(opts.body) : undefined,
+      }),
+      env,
+      {}
+    );
+
+  // Works without the x-kmp header or a cookie.
+  assert.equal((await (await agent("/api/me")).json()).username, "ana");
+  assert.equal((await agent("/api/fields", { method: "PUT", body: { fields: [{ name: "series", kind: "tags", choices: ["a", "b"] }] } })).status, 200);
+  const made = await agent("/api/posts", { method: "POST", body: { title: "Imported", date: "2019-06-01", body: "old post", published: true, fields: { series: ["b"] } } });
+  assert.equal((await made.json()).post.date, "2019-06-01");
+  assert.equal((await (await ana("/ana/imported.json?k")).json()).post.fields.series[0], "b");
+
+  // Keys stay with the person.
+  assert.equal((await agent("/api/keys")).status, 403);
+  assert.equal((await agent("/api/keys", { method: "POST", body: {} })).status, 403);
+  assert.equal((await agent("/api/password", { method: "POST", body: { current: "ana-password-1", next: "hijacked-123" } })).status, 403);
+  assert.equal((await agent("/api/me", { key: "kmp_" + "x".repeat(43) })).status, 401);
+
+  const keys = (await (await ana("/api/keys")).json()).keys;
+  assert.equal(keys[0].label, "moving my old blog");
+  assert.ok(keys[0].last_used_at);
+  assert.ok(!("token_hash" in keys[0]));
+
+  await ana(`/api/keys/${keys[0].id}`, { method: "DELETE" });
+  assert.equal((await agent("/api/me")).status, 401);
+
+  // An admin password reset revokes keys too.
+  const { key: key2 } = await (await ana("/api/keys", { method: "POST", body: {} })).json();
+  assert.equal((await agent("/api/me", { key: key2 })).status, 200);
+  const { id } = await env.DB.prepare("SELECT id FROM users WHERE username = 'ana'").first();
+  await archie(`/admin/users/${id}/password`, { method: "POST", form: { password: "" } });
+  assert.equal((await agent("/api/me", { key: key2 })).status, 401);
+});

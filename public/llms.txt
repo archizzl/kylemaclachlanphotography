@@ -1,0 +1,13 @@
+# kylemaclachlanphotography.org
+
+> Blog hosting for a small group of friends. People write markdown posts and upload photos here, then show them on their own websites with one-line embed codes, a public JSON API or RSS.
+
+AI agents setting up or migrating someone's blog should read the guide first. It covers access with an agent key, the API, custom post fields, importing posts and photos, embed codes and styling:
+
+- [Agent setup guide](https://kylemaclachlanphotography.org/agents.md): how to set up a blog to match someone's existing blog
+
+Public, read-only endpoints (no key):
+
+- `/<user>/posts.json`: published posts (`?limit`, `?filter=<field>:<value>`, `?sort=<field>`)
+- `/<user>/<slug>.json`: one post
+- `/<user>/feed.xml`, `/<user>/feed.json`: feeds

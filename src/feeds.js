@@ -2,6 +2,7 @@
 // Only published posts ever reach these functions.
 
 import { excerpt } from "./markdown.js";
+import { parseJson, publicFields } from "./fields.js";
 
 const xml = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&apos;" })[c]);
 
@@ -18,8 +19,24 @@ export function postLink(user, post, cdnBase) {
   return `${cdnBase}/${postMdKey(user.username, post.slug)}`;
 }
 
+const defsOf = user => parseJson(user.fields_json, []);
+
 export function publicUser(user) {
-  return { username: user.username, name: user.display_name || user.username, site: user.site_url || null };
+  return {
+    username: user.username,
+    name: user.display_name || user.username,
+    site: user.site_url || null,
+    // The blog's post fields, so embeds can label values and build menus in the blog's own order.
+    fields: defsOf(user).map(({ key, name, kind, choices }) => (choices ? { key, name, kind, choices } : { key, name, kind })),
+  };
+}
+
+// All of a post's tags (from every tags field), for feed categories.
+export function fieldTags(user, post) {
+  const values = publicFields(defsOf(user), parseJson(post.fields_json, {}));
+  return defsOf(user)
+    .filter(d => d.kind === "tags" && values[d.key])
+    .flatMap(d => values[d.key]);
 }
 
 export function publicPost(user, post, cdnBase) {
@@ -31,6 +48,7 @@ export function publicPost(user, post, cdnBase) {
     html: post.body_html,
     url: postLink(user, post, cdnBase),
     markdown_url: `${cdnBase}/${postMdKey(user.username, post.slug)}`,
+    fields: publicFields(defsOf(user), parseJson(post.fields_json, {})),
   };
 }
 
@@ -56,7 +74,8 @@ export function rssFeed(user, posts, { origin, cdnBase }) {
       <title>${xml(p.title)}</title>
       <link>${xml(postLink(user, p, cdnBase))}</link>
       <guid isPermaLink="false">${xml(`${origin}/${user.username}/${p.id}`)}</guid>
-      <pubDate>${rfc822(p.date)}</pubDate>
+      <pubDate>${rfc822(p.date)}</pubDate>${fieldTags(user, p).map(t => `
+      <category>${xml(t)}</category>`).join("")}
       <description>${xml(p.body_html)}</description>
     </item>`
     )
@@ -88,6 +107,7 @@ export function jsonFeed(user, posts, { origin, cdnBase }) {
       title: p.title,
       content_html: p.body_html,
       summary: excerpt(p.body_md),
+      tags: fieldTags(user, p),
       date_published: `${p.date}T12:00:00Z`,
       date_modified: p.updated_at,
     })),

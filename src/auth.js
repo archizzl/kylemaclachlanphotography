@@ -101,6 +101,37 @@ export function endAllSessions(env, userId) {
   return env.DB.prepare("DELETE FROM sessions WHERE user_id = ?").bind(userId).run();
 }
 
+// ---- agent keys ----
+// "Authorization: Bearer kmp_…" lets an agent use the dashboard API as the friend who made the key.
+
+export const MAX_AGENT_KEYS = 10;
+
+export async function createAgentKey(env, userId, label) {
+  const token = `kmp_${b64(crypto.getRandomValues(new Uint8Array(32)))}`;
+  await env.DB.prepare("INSERT INTO agent_keys (user_id, token_hash, label, created_at) VALUES (?, ?, ?, ?)")
+    .bind(userId, await sha256(token), String(label || "").replace(/\s+/g, " ").trim().slice(0, 60), new Date().toISOString())
+    .run();
+  return token;
+}
+
+// The enabled friend an agent key belongs to, or null. Also notes when the key was last used.
+export async function userFromAgentKey(env, request) {
+  const m = (request.headers.get("authorization") || "").match(/^Bearer\s+(kmp_[A-Za-z0-9_-]{20,100})$/);
+  if (!m) return null;
+  const hash = await sha256(m[1]);
+  const user = await env.DB.prepare(
+    "SELECT u.* FROM agent_keys k JOIN users u ON u.id = k.user_id WHERE k.token_hash = ? AND u.disabled = 0"
+  )
+    .bind(hash)
+    .first();
+  if (user) await env.DB.prepare("UPDATE agent_keys SET last_used_at = ? WHERE token_hash = ?").bind(new Date().toISOString(), hash).run();
+  return user;
+}
+
+export function revokeAllAgentKeys(env, userId) {
+  return env.DB.prepare("DELETE FROM agent_keys WHERE user_id = ?").bind(userId).run();
+}
+
 // ---- admin ----
 
 async function sign(value, env) {

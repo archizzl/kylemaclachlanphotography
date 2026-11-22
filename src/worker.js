@@ -15,13 +15,15 @@
  */
 
 import {
-  adminCookie, checkPassword, clearAdminCookie, clearFails, currentUser, endAllSessions, endSession,
-  generatePassword, hashPassword, isAdmin, lockedOut, passwordProblem, recordFail, same, startSession,
+  adminCookie, checkPassword, clearAdminCookie, clearFails, createAgentKey, currentUser, endAllSessions, endSession,
+  generatePassword, hashPassword, isAdmin, lockedOut, MAX_AGENT_KEYS, passwordProblem, recordFail, revokeAllAgentKeys, same,
+  startSession, userFromAgentKey,
 } from "./auth.js";
 import { renderInline, renderMarkdown } from "./markdown.js";
 import { cacheControlFor, checkUpload, cleanFileText, cleanPost, cleanSettings, contentMatches, isImage, usernameProblem } from "./rules.js";
 import { jsonFeed, postMarkdownFile, postMdKey, publicImage, publicPost, publicUser, rssFeed } from "./feeds.js";
 import { homePage, loadHome } from "./home.js";
+import { cleanFieldDefs, cleanPostFields, listQuery, parseJson } from "./fields.js";
 import { adminLoginPage, adminPage, dashboardPage, loginPage, simplePage } from "./pages.js";
 import { html, json, now, readJson, redirect } from "./util.js";
 
@@ -86,6 +88,14 @@ async function route(request, env, ctx) {
 
   // ---- the dashboard's API ----
   if (path.startsWith("/api/")) {
+    // Agents send an agent key; browsers send the login cookie.
+    if (request.headers.has("authorization")) {
+      const user = await userFromAgentKey(env, request);
+      if (!user) return json({ error: "That agent key doesn't work. It may have been revoked; make a new one in the dashboard's settings." }, 401);
+      // Keys can't manage keys or the password: those stay with the person.
+      if (path === "/api/password" || path.startsWith("/api/keys")) return json({ error: "Agent keys can't do that. Ask the person to do it in their dashboard." }, 403);
+      return api(path, method, request, env, user, url);
+    }
     const user = await currentUser(env, request);
     if (!user) return json({ error: "You've been logged out. Reload the page and log in again." }, 401);
     // Cross-site pages can't send this header without a preflight we never allow, so it blocks forged requests.
@@ -174,7 +184,8 @@ async function admin(path, method, request, env) {
       if (problem) return html(adminPage(await listUsers(env), { text: problem, problem: true }), 400);
       await env.DB.prepare("UPDATE users SET password_hash = ? WHERE id = ?").bind(await hashPassword(password), user.id).run();
       await endAllSessions(env, user.id);
-      return html(adminPage(await listUsers(env), { text: `new password for ${user.username}. they've been logged out everywhere.`, password }));
+      await revokeAllAgentKeys(env, user.id);
+      return html(adminPage(await listUsers(env), { text: `new password for ${user.username}. they've been logged out everywhere, and their agent keys are revoked.`, password }));
     }
     const disabled = form.get("disabled") === "1" ? 1 : 0;
     await env.DB.prepare("UPDATE users SET disabled = ? WHERE id = ?").bind(disabled, user.id).run();
@@ -213,6 +224,7 @@ async function api(path, method, request, env, user, url) {
       display_name: user.display_name,
       site_url: user.site_url,
       post_url_pattern: user.post_url_pattern,
+      fields: parseJson(user.fields_json, []),
       cdn: `${base}/${user.username}/`,
       feeds: { rss: `${siteOrigin(env, url)}/${user.username}/feed.xml`, json: `${siteOrigin(env, url)}/${user.username}/feed.json` },
     });
@@ -224,6 +236,30 @@ async function api(path, method, request, env, user, url) {
       .bind(s.display_name, s.site_url, s.post_url_pattern, user.id)
       .run();
     return json({ ok: true, ...s });
+  }
+  // The blog's own post fields (tags, numbers, text).
+  if (path === "/api/fields" && method === "PUT") {
+    const body = (await readJson(request)) || {};
+    const [defs, problem] = cleanFieldDefs(body.fields, parseJson(user.fields_json, []));
+    if (problem) return json({ error: problem }, 400);
+    await env.DB.prepare("UPDATE users SET fields_json = ? WHERE id = ?").bind(JSON.stringify(defs), user.id).run();
+    return json({ fields: defs });
+  }
+  // Agent keys (only reachable with the login cookie; see route()).
+  if (path === "/api/keys" && method === "GET") {
+    const { results } = await env.DB.prepare("SELECT id, label, created_at, last_used_at FROM agent_keys WHERE user_id = ? ORDER BY id DESC").bind(user.id).all();
+    return json({ keys: results });
+  }
+  if (path === "/api/keys" && method === "POST") {
+    const count = await env.DB.prepare("SELECT COUNT(*) AS n FROM agent_keys WHERE user_id = ?").bind(user.id).first();
+    if (count.n >= MAX_AGENT_KEYS) return json({ error: `You can have up to ${MAX_AGENT_KEYS} agent keys. Revoke one you don't use first.` }, 400);
+    const body = (await readJson(request)) || {};
+    return json({ key: await createAgentKey(env, user.id, body.label) });
+  }
+  const km = path.match(/^\/api\/keys\/(\d+)$/);
+  if (km && method === "DELETE") {
+    await env.DB.prepare("DELETE FROM agent_keys WHERE id = ? AND user_id = ?").bind(Number(km[1]), user.id).run();
+    return json({ ok: true });
   }
   if (path === "/api/password" && method === "POST") {
     const body = (await readJson(request)) || {};
@@ -246,18 +282,18 @@ async function api(path, method, request, env, user, url) {
   // posts
   if (path === "/api/posts" && method === "GET") {
     const { results } = await env.DB.prepare(
-      "SELECT id, slug, title, date, published, updated_at FROM posts WHERE user_id = ? ORDER BY date DESC, id DESC"
+      "SELECT id, slug, title, date, published, updated_at, fields_json FROM posts WHERE user_id = ? ORDER BY date DESC, id DESC"
     )
       .bind(user.id)
       .all();
-    return json({ posts: results });
+    return json({ posts: results.map(({ fields_json, ...p }) => ({ ...p, fields: parseJson(fields_json, {}) })) });
   }
   if (path === "/api/posts" && method === "POST") return savePost(env, user, null, await readJson(request));
   const pm = path.match(/^\/api\/posts\/(\d+)$/);
   if (pm) {
     const post = await env.DB.prepare("SELECT * FROM posts WHERE id = ? AND user_id = ?").bind(Number(pm[1]), user.id).first();
     if (!post) return json({ error: "That post isn't there any more." }, 404);
-    if (method === "GET") return json({ post });
+    if (method === "GET") return json({ post: { ...post, fields: parseJson(post.fields_json, {}) } });
     if (method === "PUT") return savePost(env, user, post, await readJson(request));
     if (method === "DELETE") {
       await env.DB.prepare("DELETE FROM posts WHERE id = ?").bind(post.id).run();
@@ -301,18 +337,30 @@ async function savePost(env, user, existing, input) {
     slug = `${p.slug.slice(0, 75)}-${n}`;
   }
 
+  // Fields: only what this blog has set up. Auto-counting numbers fill themselves in on new posts.
+  const defs = parseJson(user.fields_json, []);
+  const fields = cleanPostFields(defs, input?.fields);
+  if (!existing) {
+    for (const d of defs) {
+      if (d.kind !== "number" || !d.auto || fields[d.key] !== undefined) continue;
+      const row = await env.DB.prepare(`SELECT MAX(json_extract(fields_json, '$.${d.key}')) AS n FROM posts WHERE user_id = ?`).bind(user.id).first();
+      fields[d.key] = Math.floor(Number(row?.n) || 0) + 1;
+    }
+  }
+  const fieldsJson = JSON.stringify(fields);
+
   const bodyHtml = renderMarkdown(p.body);
   const t = now();
   let id = existing?.id;
   if (existing) {
-    await env.DB.prepare("UPDATE posts SET slug = ?, title = ?, body_md = ?, body_html = ?, date = ?, published = ?, updated_at = ? WHERE id = ?")
-      .bind(slug, p.title, p.body, bodyHtml, p.date, p.published, t, id)
+    await env.DB.prepare("UPDATE posts SET slug = ?, title = ?, body_md = ?, body_html = ?, date = ?, published = ?, fields_json = ?, updated_at = ? WHERE id = ?")
+      .bind(slug, p.title, p.body, bodyHtml, p.date, p.published, fieldsJson, t, id)
       .run();
   } else {
     const r = await env.DB.prepare(
-      "INSERT INTO posts (user_id, slug, title, body_md, body_html, date, published, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
+      "INSERT INTO posts (user_id, slug, title, body_md, body_html, date, published, fields_json, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
     )
-      .bind(user.id, slug, p.title, p.body, bodyHtml, p.date, p.published, t, t)
+      .bind(user.id, slug, p.title, p.body, bodyHtml, p.date, p.published, fieldsJson, t, t)
       .run();
     id = r.meta.last_row_id;
   }
@@ -326,7 +374,7 @@ async function savePost(env, user, existing, input) {
   }
 
   const post = await env.DB.prepare("SELECT * FROM posts WHERE id = ?").bind(id).first();
-  return json({ post });
+  return json({ post: { ...post, fields: parseJson(post.fields_json, {}) } });
 }
 
 async function upload(request, env, user, url) {
@@ -391,10 +439,12 @@ async function publicRoute(username, name, ext, env, url) {
   if (!user) return notFound();
   const base = cdnBase(env);
   const opts = { origin: siteOrigin(env, url), cdnBase: base };
+  // ?filter=<field>:<value> (repeatable) and ?sort=<field|date> (a leading - for descending).
+  const q = listQuery(parseJson(user.fields_json, []), url.searchParams);
   const recent = async limit =>
     (
-      await env.DB.prepare("SELECT * FROM posts WHERE user_id = ? AND published = 1 ORDER BY date DESC, id DESC LIMIT ?")
-        .bind(user.id, limit)
+      await env.DB.prepare(`SELECT p.* FROM posts p WHERE p.user_id = ? AND p.published = 1${q.where} ORDER BY ${q.order} LIMIT ?`)
+        .bind(user.id, ...q.binds, limit)
         .all()
     ).results;
 

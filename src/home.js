@@ -4,6 +4,7 @@
 import { escapeHtml as e } from "./util.js";
 import { postLink } from "./feeds.js";
 import { excerpt } from "./markdown.js";
+import { parseJson, publicFields } from "./fields.js";
 
 export const HOME_PAGE_SIZE = 20;
 const PHOTO_LIMIT = 200;
@@ -21,7 +22,7 @@ export async function loadHome(env, { blog = "", page = 1 } = {}) {
   const only = active.some(b => b.username === blog) ? blog : "";
 
   const { results: posts } = await env.DB.prepare(
-    `SELECT p.*, u.username, u.display_name, u.post_url_pattern FROM posts p JOIN users u ON u.id = p.user_id
+    `SELECT p.*, u.username, u.display_name, u.post_url_pattern, u.fields_json AS user_fields FROM posts p JOIN users u ON u.id = p.user_id
      WHERE p.published = 1 AND u.disabled = 0 AND (?1 = '' OR u.username = ?1)
      ORDER BY p.date DESC, p.updated_at DESC LIMIT ?2 OFFSET ?3`
   )
@@ -39,6 +40,20 @@ export async function loadHome(env, { blog = "", page = 1 } = {}) {
 }
 
 const name = u => u.display_name || u.username;
+
+// A post's own fields (emotion, number, location…) as a small line under its title.
+function fieldLine(p) {
+  const defs = parseJson(p.user_fields, []);
+  const values = publicFields(defs, parseJson(p.fields_json, {}));
+  const parts = defs
+    .filter(d => values[d.key] !== undefined)
+    .map(d =>
+      d.kind === "tags"
+        ? `<span class="field"><span class="fname">${e(d.name)}</span> ${values[d.key].map(v => `<span class="tag">${e(v)}</span>`).join(" ")}</span>`
+        : `<span class="field"><span class="fname">${e(d.name)}</span> ${e(values[d.key])}</span>`
+    );
+  return parts.length ? `<p class="fields">${parts.join("")}</p>` : "";
+}
 
 function longDate(d) {
   const t = new Date(`${d}T12:00:00Z`);
@@ -66,6 +81,7 @@ export function homePage({ blogs, only, page, posts, more, photos }, { cdnBase }
       )
       .join("\n    ")}
   </ul>
+  <p class="agents"><a href="/agents.md">guide for AI agents</a></p>
 </nav>`;
 
   const feed = posts.length
@@ -75,6 +91,7 @@ export function homePage({ blogs, only, page, posts, more, photos }, { cdnBase }
           return `<article class="post">
   <p class="byline">${only ? "" : `<a href="${q(p.username)}">${e(name(p))}</a> · `}<time datetime="${e(p.date)}">${longDate(p.date)}</time></p>
   <h2>${e(p.title)}</h2>
+  ${fieldLine(p)}
   <div class="body">${p.body_html}</div>
   ${elsewhere ? `<p class="more"><a href="${e(elsewhere)}" rel="noopener">read it on ${e(name(p))}'s site →</a></p>` : ""}
 </article>`;
@@ -111,6 +128,7 @@ export function homePage({ blogs, only, page, posts, more, photos }, { cdnBase }
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&display=swap">
 <link rel="stylesheet" href="/app/home.css">
+<link rel="alternate" type="text/markdown" title="guide for AI agents setting up a blog here" href="/agents.md">
 </head>
 <body>
 <header class="masthead">

@@ -27,6 +27,12 @@ const BLOGS = [
     username: "smallhours",
     password: "demo-smallhours-1",
     settings: { display_name: "small hours", site_url: `${DEMO}/poetry/`, post_url_pattern: `${DEMO}/poetry/?poem={slug}` },
+    // This poet tags poems by emotion, numbers them, and notes where each was written.
+    fields: [
+      { name: "emotion", kind: "tags", choices: ["tender", "restless", "lonely", "hopeful", "giddy"] },
+      { name: "no.", kind: "number", auto: true },
+      { name: "written at", kind: "text" },
+    ],
   },
   {
     username: "xenolab",
@@ -194,6 +200,7 @@ const POSTS = {
     {
       title: "small hours",
       date: "2026-11-18",
+      fields: { emotion: ["lonely", "tender"], no: 4, written_at: "the kitchen table, 3:12am" },
       body: `the fridge hums a song it learned from the moon
 the clock forgets, then remembers, then forgets
 i am awake for no reason
@@ -207,6 +214,7 @@ but we are keeping the same hours`,
     {
       title: "inventory of the kitchen at 2am",
       date: "2026-11-12",
+      fields: { emotion: ["restless", "giddy"], no: 3, written_at: "standing at the open fridge" },
       body: `one (1) lemon, optimistic
 half a loaf, wearing its heel like a hat
 a spoon that has seen things
@@ -221,6 +229,7 @@ like it might add up to a plan
     {
       title: "the bus is late again",
       date: "2026-11-04",
+      fields: { emotion: ["hopeful", "restless"], no: 2, written_at: "the 14 bus stop" },
       body: `*for everyone at the 14 stop*
 
 the bus is late again
@@ -238,6 +247,7 @@ and find, instead, a moon
     {
       title: "letter to my houseplant",
       date: "2026-10-27",
+      fields: { emotion: ["tender", "hopeful"], no: 1, written_at: "the windowsill" },
       body: `dear ferdinand,
 i am sorry about august.
 i was going through something
@@ -321,10 +331,21 @@ for (const blog of BLOGS) {
   res = await me("/login", { method: "POST", form: { username: blog.username, password: blog.password } });
   if (res.status !== 303) throw new Error(`Couldn't log in as ${blog.username}`);
   await me("/api/me", { method: "PUT", json: blog.settings });
+  if (blog.fields) await me("/api/fields", { method: "PUT", json: { fields: blog.fields } });
 
   const existing = (await (await me("/api/posts")).json()).posts;
   if (existing.length) {
-    console.log(`${blog.username}: already has ${existing.length} posts, leaving it alone`);
+    // Already seeded: just bring each post's fields up to date.
+    for (const sample of POSTS[blog.username]) {
+      const found = existing.find(p => p.title === sample.title);
+      if (!found || !sample.fields) continue;
+      const { post } = await (await me(`/api/posts/${found.id}`)).json();
+      await me(`/api/posts/${post.id}`, {
+        method: "PUT",
+        json: { title: post.title, slug: post.slug, date: post.date, body: post.body_md, published: post.published, fields: sample.fields },
+      });
+      console.log(`${blog.username}: updated fields on "${post.title}"`);
+    }
     continue;
   }
 

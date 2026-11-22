@@ -115,3 +115,18 @@ dialog textarea { width: 100%; min-height: 110px; font-size: 13px; }
 }
 #toast.show { opacity: 1; }
 #toast.bad { background: #b53a1a; }
+
+/* post fields */
+.postfields { border: 1px solid #ddd; border-radius: 3px; margin: 10px 0 0; padding: 6px 12px 8px; }
+.pf { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; margin: 6px 0; font-size: 17px; }
+.pf-name { color: #666; min-width: 6em; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chips label { display: inline-flex; align-items: center; border: 1px solid #888; border-radius: 99px; padding: 0 10px; font-size: 16px; cursor: pointer; user-select: none; }
+.chips input { position: absolute; opacity: 0; pointer-events: none; }
+.chips label:has(input:checked) { background: #000; color: #fff; border-color: #000; }
+.chips label:has(input:focus-visible) { outline: 2px solid #00e; outline-offset: 2px; }
+.fielddef { border: 1px solid #ddd; border-radius: 3px; padding: 6px 12px 10px; margin: 10px 0; }
+.fielddef .row { align-items: flex-end; }
+.fielddef select { font: inherit; font-size: 17px; }
+label.check { display: flex; gap: 8px; align-items: center; margin-top: 8px; font-size: 17px; }
+label.check input { width: auto; margin: 0; }
