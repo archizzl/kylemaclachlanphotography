@@ -88,7 +88,7 @@ function showSnippet(title, choices, extra = "") {
 function frame(active, inner) {
   const tab = (id, label) => `<a href="#${id}" class="${active === id ? "on" : ""}">${label}</a>`;
   document.querySelectorAll("dialog").forEach(d => d.remove());
-  app.innerHTML = `<header class="top"><h1>${esc(me?.display_name || username)}'s blog</h1>
+  app.innerHTML = `<header class="top"><h1>${esc(me?.display_name || username)}</h1>
     <nav>${tab("posts", "posts")}${tab("files", "files")}${tab("settings", "settings")}<a href="/logout">log out</a></nav></header>
     <main>${inner}</main>`;
 }
@@ -398,7 +398,7 @@ function settingsView() {
     "settings",
     `<h2>about you</h2>
     <form id="about" class="stack">
-      <label>name <input name="display_name" value="${esc(me.display_name)}" placeholder="${esc(username)}"></label>
+      <label>blog name <span class="muted">(shown in the sidebar on the front page and as your feed's title)</span> <input name="display_name" value="${esc(me.display_name)}" placeholder="${esc(username)}"></label>
       <label>your site <input name="site_url" value="${esc(me.site_url)}" placeholder="https://you.neocities.org"></label>
       <label>post address pattern <span class="muted">(optional) where each post lives on your site, for feed links. include {slug}.</span>
         <input name="post_url_pattern" value="${esc(me.post_url_pattern)}" placeholder="https://you.neocities.org/blog/{slug}"></label>

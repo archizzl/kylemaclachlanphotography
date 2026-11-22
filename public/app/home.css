@@ -1,0 +1,71 @@
+/* The public front page. archizzl.com's style: white, black, hairlines, lowercase. */
+
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: #fff;
+  color: #000;
+  font-family: 'Calibri', 'Atkinson Hyperlegible', 'Helvetica', sans-serif;
+  font-size: 20px;
+}
+a, a:visited { color: #00e; }
+a:hover { text-decoration: underline; opacity: 0.5; }
+h1 { font-style: italic; font-weight: normal; margin: 0; flex: 1; }
+h1 a, h1 a:visited { color: #000; text-decoration: none; }
+.muted { color: #666; }
+.black_button, .black_button:visited { background: #000; color: #fff; padding: 3px 8px; font-size: 15px; text-decoration: none; }
+.black_button:hover { opacity: 0.8; text-decoration: none; }
+
+.masthead { display: flex; align-items: center; gap: 12px; padding: 12px 16px; border-bottom: 1px solid #000; }
+
+.layout { display: grid; grid-template-columns: 220px minmax(0, 700px); gap: 40px; padding: 0 16px; }
+
+/* sidebar */
+.blogs { position: sticky; top: 0; align-self: start; padding: 18px 0; max-height: 100vh; overflow-y: auto; }
+.blogs h2 { font-size: 15px; color: #888; font-weight: normal; margin: 0 0 6px; }
+.blogs ul { list-style: none; padding: 0; margin: 0; }
+.blogs li { margin: 4px 0; }
+.blogs a.on, .blogs a.on:visited { color: #000; font-weight: bold; text-decoration: none; }
+.blogs a.site { font-size: 15px; text-decoration: none; margin-left: 2px; }
+
+/* feed */
+.feed { padding: 18px 0 40px; min-width: 0; }
+.filter { font-size: 16px; color: #666; margin: 0 0 18px; }
+.post { border-bottom: 1px solid #000; padding: 0 0 26px; margin: 0 0 26px; overflow-wrap: break-word; }
+.post h2 { margin: 2px 0 10px; }
+.byline { margin: 0; font-size: 15px; color: #888; }
+.byline a, .byline a:visited { color: #888; }
+.post .body img { max-width: 100%; height: auto; display: block; margin: 8px 0; cursor: zoom-in; }
+.post .body blockquote { margin-left: 0; padding-left: 14px; border-left: 1px solid #000; }
+.post .body pre { overflow: auto; }
+.more { font-size: 16px; }
+.pager { display: flex; justify-content: space-between; }
+
+/* photo row: pinned along the bottom of the window (on phones it sits at the end of the page) */
+:root { --strip: 148px; }
+body { padding-bottom: var(--strip); }
+.blogs { max-height: calc(100vh - var(--strip)); }
+.photos { position: fixed; left: 0; right: 0; bottom: 0; height: var(--strip); background: #fff; border-top: 1px solid #000; padding: 8px 16px 0; z-index: 5; }
+.photos h2 { font-size: 15px; color: #888; font-weight: normal; margin: 0 0 6px; }
+.photos ul { list-style: none; margin: 0; padding: 0 0 8px; display: flex; gap: 8px; overflow-x: auto; scroll-snap-type: x proximity; }
+.photos li { flex: none; scroll-snap-align: start; }
+.photos img { height: 100px; width: auto; display: block; border: 1px solid #000; cursor: zoom-in; }
+.photos a:hover { opacity: 1; }
+.photos a:hover img { opacity: 0.6; }
+
+/* photo viewer */
+#viewer { border: 1px solid #000; border-radius: 3px; padding: 10px; max-width: 94vw; max-height: 94vh; }
+#viewer::backdrop { background: rgba(255, 255, 255, 0.9); }
+#viewer img { display: block; max-width: 90vw; max-height: 80vh; }
+#viewer p { margin: 8px 0; font-size: 16px; }
+#viewer button { font: inherit; font-size: 15px; background: #efefef; border: 1px solid #000; border-radius: 5px; padding: 2px 8px; cursor: pointer; }
+
+@media (max-width: 760px) {
+  .layout { grid-template-columns: 1fr; gap: 0; }
+  .blogs { position: static; max-height: none; padding: 12px 0 0; border-bottom: 1px solid #ddd; }
+  .blogs ul { display: flex; flex-wrap: wrap; gap: 4px 14px; padding-bottom: 12px; }
+  .blogs li { margin: 0; }
+  body { padding-bottom: 0; }
+  .photos { position: static; height: auto; padding: 12px 16px 20px; }
+  .photos img { height: 110px; }
+}

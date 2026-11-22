@@ -98,7 +98,7 @@ ${noteHtml}
 <h2>add a friend</h2>
 <form method="post" action="/admin/users" class="row">
   <label>username <input name="username" required pattern="[a-z0-9][a-z0-9-]{0,28}[a-z0-9]" autocapitalize="none" spellcheck="false" placeholder="maya"></label>
-  <label>name <input name="display_name" placeholder="Maya R."></label>
+  <label>blog name <input name="display_name" placeholder="maya's notebook"></label>
   <label>password <input name="password" type="text" autocomplete="off" placeholder="blank = make one"></label>
   <button type="submit">add</button>
 </form>
@@ -106,7 +106,7 @@ ${noteHtml}
 </section>
 <section>
 <h2>everyone</h2>
-${users.length ? `<table class="users"><thead><tr><th>who</th><th>posts</th><th>files</th><th>status</th><th></th></tr></thead><tbody>${rows}</tbody></table>` : "<p>no one yet.</p>"}
+${users.length ? `<table class="users"><thead><tr><th>blog</th><th>posts</th><th>files</th><th>status</th><th></th></tr></thead><tbody>${rows}</tbody></table>` : "<p>no one yet.</p>"}
 </section>
 </main>`,
     {

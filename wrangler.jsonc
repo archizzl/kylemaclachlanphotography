@@ -15,7 +15,7 @@
     "html_handling": "auto-trailing-slash",
     // Paths that need a signed-in check go to the Worker first. Anything else that isn't a
     // static file (feeds, post JSON, /_cdn locally) falls through to the Worker anyway.
-    "run_worker_first": ["/login", "/logout", "/dashboard", "/admin", "/admin/*", "/api/*"]
+    "run_worker_first": ["/", "/login", "/logout", "/dashboard", "/admin", "/admin/*", "/api/*"]
   },
   "vars": {
     // This site's public address, used in embed codes and feeds.

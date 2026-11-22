@@ -6,7 +6,8 @@
 
 import MarkdownIt from "markdown-it";
 
-const md = new MarkdownIt({ html: false, linkify: true, typographer: true, breaks: false });
+// breaks: a single Enter is a line break, as people expect (and poems need).
+const md = new MarkdownIt({ html: false, linkify: true, typographer: true, breaks: true });
 
 // Links open normally but don't hand the friend's page to the target.
 const defaultLink = md.renderer.rules.link_open || ((tokens, i, options, env, self) => self.renderToken(tokens, i, options));

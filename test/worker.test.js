@@ -247,3 +247,35 @@ test("disabled friends can't log in and their feeds disappear", async () => {
   await archie(`/admin/users/${id}/disabled`, { method: "POST", form: { disabled: "0" } });
   assert.equal((await maya("/maya/visible.json?c")).status, 200);
 });
+
+test("the front page shows every blog's published posts, newest first, and their photos", async () => {
+  const reader = browser("10.0.0.1"); // not logged in
+  const maya = await loggedInMaya("10.0.0.2");
+  await maya("/api/me", { method: "PUT", body: { display_name: "Maya's Notebook" } });
+  await maya("/api/posts", { method: "POST", body: { title: "Old Maya", date: "2020-01-01", published: 1 } });
+  await maya("/api/posts", { method: "POST", body: { title: "Hidden Draft", date: "2099-01-01", published: 0 } });
+  const sam = browser("10.0.0.3");
+  await sam("/login", { method: "POST", form: { username: "sam", password: "sam-password-1" } });
+  await sam("/api/posts", { method: "POST", body: { title: "Sam <Newest>", date: "2030-05-05", body: "hi <b>there</b>", published: 1 } });
+
+  const res = await reader("/?all");
+  assert.equal(res.status, 200);
+  const page = await res.text();
+  assert.match(page, /<nav class="blogs"[\s\S]*Maya&#39;s Notebook[\s\S]*sam/);
+  assert.ok(!page.includes("Hidden Draft"));
+  assert.ok(page.includes("Sam &lt;Newest&gt;"));
+  assert.ok(page.includes("hi &lt;b&gt;there&lt;/b&gt;")); // typed HTML stays text
+  assert.ok(page.indexOf("Sam &lt;Newest&gt;") < page.indexOf("Old Maya")); // newest first, across blogs
+  assert.match(page, /<section class="photos"[\s\S]*maya\/dog\.png[\s\S]*alt="my dog asleep"/);
+
+  // ?blog= narrows everything to one blog.
+  const only = await (await reader("/?blog=sam")).text();
+  assert.ok(only.includes("Sam &lt;Newest&gt;"));
+  assert.ok(!only.includes("Old Maya"));
+  assert.ok(!only.includes("maya/dog.png"));
+
+  // Switched-off blogs disappear from it.
+  const { id } = await env.DB.prepare("SELECT id FROM users WHERE username = 'sam'").first();
+  await archie(`/admin/users/${id}/disabled`, { method: "POST", form: { disabled: "1" } });
+  assert.ok(!(await (await reader("/?after-disable")).text()).includes("Sam &lt;Newest&gt;"));
+});

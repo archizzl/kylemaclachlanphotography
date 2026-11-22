@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>small hours · poems</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<!-- Comic Neue stands in where Comic Sans MS isn't installed (e.g. phones). -->
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Comic+Neue:ital,wght@0,400;0,700;1,400&display=swap">
+<style>
+  /*
+   * A sample friend's site: a poetry blog in Comic Sans.
+   * Everything below is this site's own CSS. The poems come from the blog server through
+   * embed.js; the .kmp-* rules are how this site restyles them.
+   */
+  :root {
+    --paper: #fffbea;
+    --ink: #3b3355;
+    --pink: #ff7eb6;
+    --blue: #7ec8ff;
+    --lemon: #ffe66d;
+  }
+  * { box-sizing: border-box; }
+  html { background: var(--paper); }
+  body {
+    margin: 0;
+    padding: 0 16px 80px;
+    color: var(--ink);
+    font-family: "Comic Sans MS", "Comic Sans", "Comic Neue", cursive;
+    font-size: 19px;
+    line-height: 1.65;
+    /* lined notebook paper */
+    background-image:
+      linear-gradient(90deg, transparent 54px, rgba(255, 126, 182, 0.35) 54px, rgba(255, 126, 182, 0.35) 56px, transparent 56px),
+      repeating-linear-gradient(transparent 0 30px, rgba(126, 200, 255, 0.35) 30px 31px);
+  }
+  header { text-align: center; padding: 48px 0 10px; }
+  header h1 {
+    font-size: clamp(44px, 9vw, 78px);
+    margin: 0;
+    color: var(--pink);
+    text-shadow: 3px 3px 0 var(--lemon), 6px 6px 0 var(--blue);
+    transform: rotate(-2deg);
+  }
+  header p { margin: 10px 0 0; font-style: italic; }
+  nav { text-align: center; margin: 8px 0 30px; }
+  a { color: var(--ink); text-decoration-color: var(--pink); text-decoration-thickness: 3px; text-underline-offset: 3px; }
+  a:hover { background: var(--lemon); }
+  main { max-width: 620px; margin: 0 auto; }
+
+  /* ---- restyling the embedded poems ---- */
+  .kmp-post {
+    background: #fff;
+    border: 3px solid var(--ink);
+    /* wobbly hand-drawn corners */
+    border-radius: 255px 15px 225px 15px / 15px 225px 15px 255px;
+    padding: 26px 34px 30px;
+    margin: 0 0 44px;
+    box-shadow: 6px 7px 0 var(--blue);
+    transform: rotate(-0.8deg);
+  }
+  .kmp-post:nth-child(even) { transform: rotate(0.9deg); box-shadow: 6px 7px 0 var(--pink); }
+  .kmp-title { font-size: 30px; margin: 0; line-height: 1.2; }
+  .kmp-title a { text-decoration: none; }
+  .kmp-title a:hover { background: none; color: var(--pink); }
+  .kmp-date {
+    display: inline-block;
+    background: var(--lemon);
+    padding: 0 10px;
+    border-radius: 99px;
+    font-size: 14px;
+    margin: 6px 0 16px;
+    transform: rotate(-3deg);
+  }
+  .kmp-body p { margin: 0 0 1.1em; }
+  .kmp-body em { color: #7a6f99; }
+  .kmp-body strong { color: var(--pink); }
+  .kmp-body img {
+    max-width: 100%;
+    height: auto;
+    border: 3px solid var(--ink);
+    border-radius: 18px;
+    transform: rotate(1.5deg);
+    margin: 8px 0;
+  }
+  .kmp-error { text-align: center; }
+
+  footer { text-align: center; font-size: 15px; margin-top: 40px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>small hours</h1>
+  <p>poems written after midnight, mostly in the kitchen</p>
+</header>
+<nav id="nav"></nav>
+<main id="poems"></main>
+<footer>✿ made with insomnia & a houseplant ✿</footer>
+
+<script>
+  // One poem when the address says ?poem=<slug>, otherwise all of them.
+  // The script tag is what the dashboard's "embed code" button gives you.
+  const poem = new URLSearchParams(location.search).get("poem");
+  const s = document.createElement("script");
+  s.src = "http://localhost:8127/embed.js";
+  s.async = true;
+  s.dataset.user = "smallhours";
+  if (poem) s.dataset.post = poem;
+  else s.dataset.list = "20";
+  document.getElementById("poems").append(s);
+  document.getElementById("nav").innerHTML = poem ? '<a href="./">← all the poems</a>' : "";
+</script>
+</body>
+</html>

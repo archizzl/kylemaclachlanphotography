@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SYNTHETIC TENDERNESS</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;700&family=JetBrains+Mono:ital,wght@0,400;0,700;1,400&display=swap">
+<style>
+  /*
+   * A sample friend's site: xenofeminist photo & writing.
+   * Every embed here uses data-style="none", so none of embed.js's defaults apply; all the look
+   * comes from the .kmp-* rules below.
+   */
+  :root {
+    --void: #07060c;
+    --text: #e6e3f2;
+    --dim: #8b86a3;
+    --acid: #b6ff00;
+    --violet: #8a5cff;
+    --hot: #ff2878;
+    --mono: "JetBrains Mono", ui-monospace, Menlo, monospace;
+    --grot: "Space Grotesk", "Helvetica Neue", Arial, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  html { background: var(--void); }
+  body {
+    margin: 0;
+    color: var(--text);
+    font-family: var(--grot);
+    font-size: 18px;
+    line-height: 1.6;
+    /* faint scanlines over everything */
+    background-image: repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.025) 0 1px, transparent 1px 3px);
+  }
+  ::selection { background: var(--acid); color: var(--void); }
+  a { color: var(--acid); text-decoration: none; border-bottom: 1px dashed currentColor; }
+  a:hover { color: var(--void); background: var(--acid); }
+
+  header { padding: 56px 24px 28px; border-bottom: 1px solid var(--violet); }
+  .tag { font-family: var(--mono); font-size: 13px; letter-spacing: 0.2em; color: var(--acid); text-transform: uppercase; }
+  h1 {
+    margin: 10px 0 8px;
+    font-size: clamp(46px, 10vw, 128px);
+    line-height: 0.88;
+    letter-spacing: -0.04em;
+    text-transform: uppercase;
+    background: linear-gradient(100deg, var(--violet) 10%, var(--acid) 55%, var(--hot) 95%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+  header p { font-family: var(--mono); color: var(--dim); margin: 0; max-width: 640px; font-size: 14px; }
+
+  section { padding: 34px 24px; border-bottom: 1px solid #241f36; }
+  section > h2 { font-family: var(--mono); font-size: 14px; font-weight: 400; color: var(--violet); letter-spacing: 0.2em; margin: 0 0 18px; }
+  section > h2::before { content: "/// "; color: var(--acid); }
+  .back { font-family: var(--mono); font-size: 14px; }
+
+  /* ---- photos: five data-image embeds laid out as a grid ---- */
+  .gallery { display: grid; grid-template-columns: repeat(4, 1fr); grid-auto-rows: 220px; gap: 10px; }
+  .gallery > .kmp-embed:nth-of-type(1) { grid-column: span 2; grid-row: span 2; }
+  .gallery > .kmp-embed:nth-of-type(4) { grid-column: span 2; }
+  .kmp-image { position: relative; margin: 0; height: 100%; overflow: hidden; border: 1px solid #2c2642; }
+  .kmp-image img {
+    width: 100%; height: 100%; object-fit: cover; display: block;
+    filter: saturate(1.1) contrast(1.05);
+    transition: transform 0.6s, filter 0.6s;
+  }
+  .kmp-image:hover img { transform: scale(1.06); filter: hue-rotate(70deg) saturate(1.6); }
+  .kmp-image figcaption {
+    position: absolute; left: 0; right: 0; bottom: 0;
+    font-family: var(--mono); font-size: 12px; line-height: 1.4;
+    padding: 8px 10px; color: var(--acid);
+    background: linear-gradient(transparent, rgba(7, 6, 12, 0.92) 40%);
+    transform: translateY(100%); transition: transform 0.35s;
+  }
+  .kmp-image:hover figcaption, .kmp-image:focus-within figcaption { transform: none; }
+  .kmp-image figcaption::before { content: "▸ "; }
+  .kmp-image figcaption strong { color: var(--hot); }
+
+  /* ---- writing: data-list, numbered with a counter ---- */
+  .writing { max-width: 760px; counter-reset: tx; padding-top: 40px; }
+  .writing > h2 { margin-bottom: 52px; }
+  .kmp-post { counter-increment: tx; position: relative; padding: 0 0 34px 26px; margin: 0 0 34px; border-left: 2px solid var(--violet); }
+  .kmp-post::before {
+    content: "TX." counter(tx, decimal-leading-zero);
+    position: absolute; left: -2px; top: -26px;
+    font-family: var(--mono); font-size: 12px; color: var(--void); background: var(--acid); padding: 1px 8px;
+  }
+  .kmp-title { font-size: clamp(28px, 4vw, 42px); line-height: 1.05; letter-spacing: -0.02em; text-transform: uppercase; margin: 14px 0 6px; }
+  .kmp-title a { color: var(--text); border: 0; }
+  .kmp-title a:hover { color: var(--void); }
+  .kmp-date { display: block; font-family: var(--mono); font-size: 13px; color: var(--violet); margin-bottom: 18px; }
+  .kmp-date::before { content: "timestamp: "; color: var(--dim); }
+  .kmp-body h2 { font-family: var(--mono); font-size: 15px; color: var(--acid); text-transform: uppercase; letter-spacing: 0.12em; margin: 28px 0 8px; }
+  .kmp-body blockquote {
+    margin: 22px 0; padding: 14px 18px; border: 1px solid var(--violet);
+    background: linear-gradient(120deg, rgba(138, 92, 255, 0.18), rgba(182, 255, 0, 0.06));
+    font-size: 20px;
+  }
+  .kmp-body blockquote p { margin: 0; }
+  .kmp-body ol { padding-left: 1.3em; }
+  .kmp-body ol li::marker { color: var(--hot); font-family: var(--mono); }
+  .kmp-body em { color: var(--acid); font-style: normal; font-family: var(--mono); font-size: 0.9em; }
+  .kmp-body strong { color: var(--hot); }
+  .kmp-body img {
+    display: block; max-width: 100%; height: auto; margin: 18px 0;
+    border: 1px solid var(--violet);
+    filter: grayscale(1) contrast(1.2);
+    mix-blend-mode: screen;
+    transition: filter 0.5s;
+  }
+  .kmp-body img:hover { filter: none; }
+  .kmp-error { font-family: var(--mono); color: var(--hot); }
+
+  footer { padding: 24px; font-family: var(--mono); font-size: 12px; color: var(--dim); }
+
+  @media (max-width: 700px) {
+    .gallery { grid-template-columns: 1fr 1fr; grid-auto-rows: 150px; }
+    .gallery > .kmp-embed:nth-of-type(4) { grid-column: span 1; }
+    .kmp-image figcaption { transform: none; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <div class="tag">photo &amp; writing // xenofeminist practice</div>
+  <h1>Synthetic<br>Tenderness</h1>
+  <p>computed surfaces and notes on care, technology and bodies-in-progress. nothing here was photographed. everything here is real.</p>
+</header>
+
+<div id="single" hidden>
+  <section><a class="back" href="./">← back to all transmissions</a></section>
+  <section class="writing" id="one"></section>
+</div>
+
+<div id="index">
+  <section>
+    <h2>SURFACES</h2>
+    <!-- Each photo is one "embed code" from the dashboard's files page, with data-style="none" added. -->
+    <div class="gallery">
+      <script src="http://localhost:8127/embed.js" data-user="xenolab" data-image="chrome-membrane.jpg" data-style="none" async></script>
+      <script src="http://localhost:8127/embed.js" data-user="xenolab" data-image="lattice.jpg" data-style="none" async></script>
+      <script src="http://localhost:8127/embed.js" data-user="xenolab" data-image="signal.jpg" data-style="none" async></script>
+      <script src="http://localhost:8127/embed.js" data-user="xenolab" data-image="spectral-body.jpg" data-style="none" async></script>
+      <script src="http://localhost:8127/embed.js" data-user="xenolab" data-image="orbit.jpg" data-style="none" async></script>
+    </div>
+  </section>
+
+  <section class="writing">
+    <h2>TRANSMISSIONS</h2>
+    <script src="http://localhost:8127/embed.js" data-user="xenolab" data-list="10" data-style="none" async></script>
+  </section>
+</div>
+
+<footer>synthetic tenderness · served from kylemaclachlanphotography.org · styled here</footer>
+
+<script>
+  // ?post=<slug> shows one transmission on its own (the blog's post address pattern points here).
+  const slug = new URLSearchParams(location.search).get("post");
+  if (slug) {
+    document.getElementById("index").remove();
+    document.getElementById("single").hidden = false;
+    const s = document.createElement("script");
+    s.src = "http://localhost:8127/embed.js";
+    s.async = true;
+    Object.assign(s.dataset, { user: "xenolab", post: slug, style: "none" });
+    document.getElementById("one").append(s);
+  }
+</script>
+</body>
+</html>

@@ -6,6 +6,12 @@ Blog hosting for friends at https://kylemaclachlanphotography.org. Archie makes 
 
 One Cloudflare Worker (`blog-cdn`) on the Reaction Future Institute account, plus a D1 database and an R2 bucket.
 
+- **The front page** (`/`, `src/home.js`) is public. No login needed.
+  - A left sidebar lists every blog. Each name filters the page to that blog (`/?blog=<user>`), and ↗ goes to the friend's own site.
+  - The middle is one feed of every published post from every blog, newest first, 20 per page.
+  - Along the bottom is a row of every uploaded photo. It's pinned to the window on desktop and sits at the end of the page on phones. Clicking a photo opens it bigger.
+  - It's cached for 60 seconds.
+
 - **Friends** log in at `/login` and use the dashboard at `/dashboard` (`public/app/app.js`):
   - **posts**: a markdown editor with a live preview, an "insert photo" button, and save draft, publish or unpublish.
   - **files**: drag-and-drop upload, copy link and delete. Photos also get **describe** (alt text and an optional caption) and **embed code** (a live embed, or a plain `<img>` for sites that block scripts). You can also import a `.md` or `.txt` file as a draft post.
@@ -46,7 +52,16 @@ npm test         # unit tests + the real Worker against a throwaway local D1/R2
 
 - `.dev.vars` (git-ignored) holds the local `ADMIN_PASSWORD`, and sets `SITE_ORIGIN` and `CDN_BASE` to localhost.
 - Local data lives in `.wrangler/state`. Delete that folder to start fresh.
-- `demo/index.html` is a stand-in for a friend's site. Serve it on another port (launch config `blog-cdn-demo`, port 8128) and open `http://localhost:8128/?user=<name>&post=<slug>`, or `?user=<name>&list=5`.
+- **Sample blogs**: with the dev server running, `node scripts/seed-demo.mjs` creates two local friends with posts and computer-drawn photos:
+  - `smallhours`: "small hours", a poetry blog.
+  - `xenolab`: "synthetic tenderness", xenofeminist photo and writing.
+
+  Their local passwords are in the script. Then start the `blog-cdn-demo` launch config (port 8128) and open:
+  - http://localhost:8128/poetry/: Comic Sans notebook paper, restyling the embeds' default look.
+  - http://localhost:8128/xeno/: dark acid-and-violet grid. Uses `data-style="none"` and styles everything itself.
+
+  Both are plain HTML files in `demo/` that use the same embed codes a friend would paste.
+- `demo/index.html` is a bare stand-in for a friend's site. Serve it on another port (launch config `blog-cdn-demo`, port 8128) and open `http://localhost:8128/?user=<name>&post=<slug>`, or `?user=<name>&list=5`.
 
 ## going live (first time)
 

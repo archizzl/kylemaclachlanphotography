@@ -32,6 +32,10 @@ test("markdown basics render", () => {
   assert.match(renderMarkdown("see https://example.org"), /href="https:\/\/example.org"/);
 });
 
+test("a single Enter is a line break (poems keep their shape)", () => {
+  assert.equal(renderMarkdown("one\ntwo\n\nthree"), "<p>one<br>\ntwo</p>\n<p>three</p>\n");
+});
+
 test("excerpt strips formatting and shortens", () => {
   assert.equal(excerpt("**Bold** and [a link](https://x.org) ![pic](y.jpg)"), "Bold and a link");
   assert.ok(excerpt("word ".repeat(200)).endsWith("…"));

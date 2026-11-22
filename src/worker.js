@@ -21,6 +21,7 @@ import {
 import { renderInline, renderMarkdown } from "./markdown.js";
 import { cacheControlFor, checkUpload, cleanFileText, cleanPost, cleanSettings, contentMatches, isImage, usernameProblem } from "./rules.js";
 import { jsonFeed, postMarkdownFile, postMdKey, publicImage, publicPost, publicUser, rssFeed } from "./feeds.js";
+import { homePage, loadHome } from "./home.js";
 import { adminLoginPage, adminPage, dashboardPage, loginPage, simplePage } from "./pages.js";
 import { html, json, now, readJson, redirect } from "./util.js";
 
@@ -56,6 +57,16 @@ async function route(request, env, ctx) {
 
   // Locally there's no R2 custom domain, so the Worker stands in for it.
   if (path.startsWith("/_cdn/") && cdnBase(env).endsWith("/_cdn")) return localCdn(path.slice(6), env);
+
+  // ---- the public front page ----
+  if (path === "/" && (method === "GET" || method === "HEAD")) {
+    return cachedPublic(request, ctx, async () => {
+      const blog = String(url.searchParams.get("blog") || "").slice(0, 30);
+      const page = Math.min(1000, Math.max(1, parseInt(url.searchParams.get("page"), 10) || 1));
+      const data = await loadHome(env, { blog, page });
+      return html(homePage(data, { cdnBase: cdnBase(env) }), 200, { "cache-control": `public, max-age=${PUBLIC_CACHE_SECONDS}`, "x-frame-options": "DENY" });
+    });
+  }
 
   // ---- friends signing in ----
   if (path === "/login" && method === "GET") {
