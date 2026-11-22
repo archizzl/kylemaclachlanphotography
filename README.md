@@ -91,7 +91,16 @@ npm test         # unit tests + the real Worker against a throwaway local D1/R2
   Both are plain HTML files in `demo/` that use the same embed codes a friend would paste.
 - `demo/index.html` is a bare stand-in for a friend's site. Serve it on another port (launch config `blog-cdn-demo`, port 8128) and open `http://localhost:8128/?user=<name>&post=<slug>`, or `?user=<name>&list=5`.
 
-## going live (first time)
+## live
+
+**Deployed 2026-11-22**: https://kylemaclachlanphotography.org (`www` redirects), with files at https://cdn.kylemaclachlanphotography.org.
+- D1 `blog-cdn` (`e4bb3d02-…`), R2 `blog-cdn-files` with `r2-cors.json` applied, a daily usage-sync cron at 06:20 UTC.
+- The old GitHub Pages DNS records are in `DNS-BEFORE-CUTOVER.md`.
+- Still to do by hand: a Response Header Transform Rule adding `X-Content-Type-Options: nosniff` on `cdn.` (wrangler's login can't edit zone rules), and removing the custom domain from the `reactionfutureinstitute.github.io` repo's Pages settings.
+
+Later deploys: `npm run deploy`.
+
+## going live (first time, for reference)
 
 ```bash
 npx wrangler d1 create blog-cdn                 # put the database_id it prints into wrangler.jsonc
@@ -103,7 +112,7 @@ npx wrangler secret put CF_ANALYTICS_TOKEN     # API token with only "Account An
 Then in the Cloudflare dashboard:
 
 1. **R2 → blog-cdn-files → Settings → Custom Domains**: connect `cdn.kylemaclachlanphotography.org`.
-2. **R2 → blog-cdn-files → Settings → CORS policy**: allow `GET` and `HEAD` from `*`.
+2. **CORS**: `npx wrangler r2 bucket cors set blog-cdn-files --file r2-cors.json` (allows `GET` and `HEAD` from anywhere).
 3. **kylemaclachlanphotography.org → Rules → Transform Rules → Response Header**: for hostname `cdn.kylemaclachlanphotography.org`, set `X-Content-Type-Options: nosniff`.
 4. **kylemaclachlanphotography.org → DNS**: delete the four GitHub Pages `A` records on the apex and the `www` CNAME. This takes the Reaction Future Institute page off this domain. It's still at reactionfutureinstitute.github.io, and you should also remove the custom domain in that repo's Pages settings.
 

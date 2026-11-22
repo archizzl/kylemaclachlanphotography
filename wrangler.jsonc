@@ -39,7 +39,7 @@
     {
       "binding": "DB",
       "database_name": "blog-cdn",
-      "database_id": "00000000-0000-0000-0000-000000000000",
+      "database_id": "e4bb3d02-9f0d-4762-bdf1-f5c3ddba7efd",
       "migrations_dir": "migrations"
     }
   ],
