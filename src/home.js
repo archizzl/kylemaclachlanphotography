@@ -60,8 +60,9 @@ export function homePage({ blogs, only, page, posts, more, photos }, { cdnBase }
     <li><a href="/" class="${only ? "" : "on"}">everything</a></li>
     ${blogs
       .map(
-        b => `<li><a href="${q(b.username)}" class="${b.username === only ? "on" : ""}">${e(name(b))}</a>
-      ${b.site_url ? `<a class="site" href="${e(b.site_url)}" rel="noopener" title="${e(name(b))}'s own site">↗</a>` : ""}</li>`
+        b => `<li title="${e(name(b))}"><a href="${q(b.username)}" class="${b.username === only ? "on" : ""}">${e(name(b))}</a>${
+          b.site_url ? `&nbsp;<a class="site" href="${e(b.site_url)}" rel="noopener" title="${e(name(b))}'s own site">↗</a>` : ""
+        }</li>`
       )
       .join("\n    ")}
   </ul>
@@ -72,7 +73,7 @@ export function homePage({ blogs, only, page, posts, more, photos }, { cdnBase }
         .map(p => {
           const elsewhere = p.post_url_pattern ? postLink(p, p, cdnBase) : "";
           return `<article class="post">
-  <p class="byline"><a href="${q(p.username)}">${e(name(p))}</a> · <time datetime="${e(p.date)}">${longDate(p.date)}</time></p>
+  <p class="byline">${only ? "" : `<a href="${q(p.username)}">${e(name(p))}</a> · `}<time datetime="${e(p.date)}">${longDate(p.date)}</time></p>
   <h2>${e(p.title)}</h2>
   <div class="body">${p.body_html}</div>
   ${elsewhere ? `<p class="more"><a href="${e(elsewhere)}" rel="noopener">read it on ${e(name(p))}'s site →</a></p>` : ""}
@@ -105,7 +106,7 @@ export function homePage({ blogs, only, page, posts, more, photos }, { cdnBase }
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>${here ? `${e(name(here))} · ` : ""}blogs for friends</title>
+<title>${here ? `${e(name(here))} · ` : ""}kyle maclachlan photography</title>
 <meta name="description" content="writing and photos from a few friends' blogs, all in one place.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&display=swap">
@@ -113,13 +114,12 @@ export function homePage({ blogs, only, page, posts, more, photos }, { cdnBase }
 </head>
 <body>
 <header class="masthead">
-  <h1><a href="/">blogs for friends</a></h1>
+  <h1><a href="/">kyle maclachlan photography</a></h1>
   <a class="black_button" href="/login">log in</a>
 </header>
 <div class="layout">
 ${sidebar}
 <main class="feed">
-${here ? `<p class="filter">showing <b>${e(name(here))}</b> · <a href="/">show everyone</a></p>` : ""}
 ${feed}
 ${pager}
 </main>
