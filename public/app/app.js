@@ -1,4 +1,6 @@
-// The friend dashboard: posts, files, settings. Talks to /api/* in src/worker.js.
+// The friend dashboard: posts, files, style, settings. Talks to /api/* in src/worker.js.
+
+import { CONTROLS, PRESETS, SITE_CONTROLS, cssFrom, siteFontStack } from "./stylekit.js";
 
 const { username, cdnBase, origin } = window.KMP;
 const app = document.getElementById("app");
@@ -97,7 +99,7 @@ function frame(active, inner) {
   const tab = (id, label) => `<a href="#${id}" class="${active === id ? "on" : ""}">${label}</a>`;
   document.querySelectorAll("dialog").forEach(d => d.remove());
   app.innerHTML = `<header class="top"><h1>${esc(me?.display_name || username)}</h1>
-    <nav>${tab("posts", "posts")}${tab("files", "files")}${tab("settings", "settings")}<a href="/logout">log out</a></nav></header>
+    <nav>${tab("posts", "posts")}${tab("files", "files")}${tab("style", "style")}${tab("settings", "settings")}<a href="/logout">log out</a></nav></header>
     <main>${inner}</main>`;
 }
 
@@ -114,6 +116,7 @@ async function render() {
     if (!me) me = await api("me");
     if (view === "files") return await filesView();
     if (view === "settings") return settingsView();
+    if (view === "style") return await styleView();
     if (view === "edit") return await editView(id);
     return await postsView();
   } catch (err) {
@@ -476,6 +479,127 @@ async function costs() {
   } catch (err) {
     box.innerHTML = `<p class="problem">${esc(err.message)}</p>`;
   }
+}
+
+// ---- style playground ----
+// Try out looks on your own posts, then copy the CSS into your site. Nothing here changes KMP:
+// the CSS only does anything once it's on your own page.
+
+const STYLE_KEY = `kmp-style-${username}`;
+function loadStyle() {
+  try { return JSON.parse(localStorage.getItem(STYLE_KEY)) || {}; } catch { return {}; }
+}
+function saveStyle(s) {
+  try { localStorage.setItem(STYLE_KEY, JSON.stringify(s)); } catch {}
+}
+
+async function styleView() {
+  let s = loadStyle();
+  const [{ posts }, { files }] = await Promise.all([api("posts"), api("files")]);
+  const published = posts.filter(p => p.published);
+  const photo = files.find(f => f.content_type.startsWith("image/"));
+  const tagsField = (me.fields || []).find(d => d.kind === "tags");
+
+  const control = c => {
+    const v = s[c.key] ?? c.def ?? "";
+    if (c.type === "select") {
+      return `<label>${esc(c.label)} <select data-key="${c.key}">${Object.entries(c.options)
+        .map(([val, label]) => `<option value="${esc(val)}"${val === v ? " selected" : ""}>${esc(label)}</option>`)
+        .join("")}</select></label>`;
+    }
+    // Colours can be left unset ("your site decides").
+    const on = Boolean(v);
+    return `<label class="colour">${esc(c.label)}
+      <span><input type="checkbox" data-on="${c.key}"${on ? " checked" : ""} aria-label="set ${esc(c.label)}">
+      <input type="color" data-key="${c.key}" value="${esc(v || c.def || "#333333")}"${on || c.def ? "" : " disabled"}></span></label>`;
+  };
+  const groups = [...new Set(CONTROLS.map(c => c.group))];
+  const sample = [
+    ["list", `your latest posts${tagsField ? `, with ${tagsField.name} buttons` : ""}`],
+    ...(published.length ? [["post", `one post: ${published[0].title}`]] : []),
+    ...(photo ? [["photo", `one photo: ${photo.name}`]] : []),
+  ];
+
+  frame(
+    "style",
+    `<p>try out how your posts could look on your own site. the preview uses your real posts. when you like it, copy the css at the bottom into your site.</p>
+    <div class="playground">
+      <form class="style-controls" id="controls" autocomplete="off">
+        <label>start from <select id="preset"><option value="">pick a look…</option>${Object.keys(PRESETS).map(n => `<option>${esc(n)}</option>`).join("")}</select></label>
+        ${groups.map(g => `<fieldset><legend>${esc(g)}</legend>${CONTROLS.filter(c => c.group === g).map(control).join("")}</fieldset>`).join("")}
+        <fieldset class="site"><legend>your site (preview only)</legend>
+          <p class="muted">roughly what your page looks like around the posts. this isn't in the css.</p>
+          ${SITE_CONTROLS.map(control).join("")}
+        </fieldset>
+      </form>
+      <div class="style-preview">
+        <label>show <select id="sample">${sample.map(([v, l]) => `<option value="${v}">${esc(l)}</option>`).join("")}</select></label>
+        <iframe id="stage" title="preview of your posts on your site"></iframe>
+        ${published.length ? "" : `<p class="muted">publish a post to see it here.</p>`}
+      </div>
+    </div>
+    <h2>your css</h2>
+    <p class="muted">paste this into your site's stylesheet, or inside <code>&lt;style&gt;…&lt;/style&gt;</code> in your page's <code>&lt;head&gt;</code>. it works with every embed code from this dashboard, and your site's own styles fill in anything you didn't set.${s.font === "atkinson" ? ` Atkinson Hyperlegible is a web font: also add <code>&lt;link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible&amp;display=swap"&gt;</code>.` : ""}</p>
+    <textarea id="css" class="cssout" readonly></textarea>
+    <div class="toolbar"><button class="primary" id="copycss">copy css</button><button id="resetstyle">start over</button></div>`
+  );
+  app.onclick = null;
+
+  const stage = $("#stage");
+  const cssBox = $("#css");
+
+  // The preview is its own little page, so the dashboard's styles don't leak in.
+  function stageDoc(kind) {
+    const tag = (attrs) => `<script src="${origin}/embed.js" data-user="${username}" ${attrs} async><\/script>`;
+    const embed =
+      kind === "post" ? tag(`data-post="${esc(published[0].slug)}"`)
+      : kind === "photo" ? tag(`data-image="${esc(photo.name)}"`)
+      : tag(`data-list="3"${tagsField ? ` data-menu="${esc(tagsField.key)}"` : ""}`);
+    return `<!doctype html><html><head><meta charset="utf-8"><style id="site"></style><style id="play"></style></head><body>${embed}</body></html>`;
+  }
+
+  function apply() {
+    const css = cssFrom(s);
+    cssBox.value = css || "/* nothing changed yet: your site's own styles are used */";
+    const doc = stage.contentDocument;
+    if (!doc || !doc.getElementById("play")) return;
+    doc.getElementById("play").textContent = css;
+    doc.getElementById("site").textContent =
+      `body { margin: 0; padding: 24px; background: ${s.siteBg || "#ffffff"}; color: ${s.siteText || "#111111"}; font-family: ${siteFontStack(s.siteFont)}; }`;
+    saveStyle(s);
+  }
+
+  function load(kind) {
+    stage.onload = apply;
+    stage.srcdoc = stageDoc(kind);
+  }
+  load($("#sample").value);
+  apply();
+
+  const controls = $("#controls");
+  controls.addEventListener("input", ev => {
+    const t = ev.target;
+    if (t.dataset.on) {
+      const colour = controls.querySelector(`input[type=color][data-key="${t.dataset.on}"]`);
+      colour.disabled = !t.checked;
+      s[t.dataset.on] = t.checked ? colour.value : "";
+    } else if (t.dataset.key) {
+      if (t.type === "color" && t.disabled) return;
+      s[t.dataset.key] = t.value;
+    } else return;
+    apply();
+  });
+  $("#preset").onchange = ev => {
+    const p = PRESETS[ev.target.value];
+    if (!p) return;
+    const site = Object.fromEntries(Object.entries(s).filter(([k]) => k.startsWith("site")));
+    s = { ...site, ...p };
+    saveStyle(s);
+    styleView();
+  };
+  $("#sample").onchange = ev => load(ev.target.value);
+  $("#copycss").onclick = () => copy(cssBox.value, "css copied");
+  $("#resetstyle").onclick = () => { s = {}; saveStyle(s); styleView(); };
 }
 
 // ---- agent keys ----

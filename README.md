@@ -13,7 +13,11 @@ One Cloudflare Worker (`blog-cdn`) on the Reaction Future Institute account, plu
   - It's cached for 60 seconds.
 
 - **Friends** log in at `/login` and use the dashboard at `/dashboard` (`public/app/app.js`):
-  - **posts**: a markdown editor with a live preview, an "insert photo" button, and save draft, publish or unpublish.
+  - **posts**: a markdown editor with a live preview, and save draft, publish or unpublish. Add photos with the "insert photo" button, by dragging them onto the editor, or by pasting.
+  - **style**: a playground for how their posts could look on their own site.
+    - Pick a starting look (clean, notebook, newspaper, typewriter, night) or set things one by one: font, sizes, title style, dates, links, tag pills, photo frames, spacing, cards, box colour.
+    - It previews their real posts in a sandboxed page with a stand-in for their site's background, then gives CSS to copy (`public/app/stylekit.js`).
+    - Only changed settings become CSS, so their site's styles fill in the rest. Nothing is saved on KMP; the browser remembers their choices.
   - **files**: drag-and-drop upload, copy link and delete. Photos also get **describe** (alt text and an optional caption) and **embed code** (a live embed, or a plain `<img>` for sites that block scripts). You can also import a `.md` or `.txt` file as a draft post.
   - **settings**:
     - blog name, site address, and an optional post address pattern (used for feed links);

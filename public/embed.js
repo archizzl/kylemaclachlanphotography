@@ -46,8 +46,7 @@
       ":where(.kmp-menu-label){opacity:.7;margin-right:.3em}" +
       ":where(button.kmp-tag){font:inherit;font-size:inherit;color:inherit;background:none;cursor:pointer}" +
       ":where(.kmp-menu button){font:inherit;color:inherit;background:none;border:1px solid currentColor;border-radius:99px;padding:.1em .8em;cursor:pointer}" +
-      ":where(.kmp-menu button[aria-pressed=true]){background:currentColor}" +
-      ":where(.kmp-menu button[aria-pressed=true] span){filter:invert(1)}" +
+      ":where(.kmp-menu button[aria-pressed=true]){outline:2px solid currentColor;outline-offset:1px;font-weight:bold}" +
       ":where(.kmp-group-title){margin:1.5em 0 .8em}" +
       ":where(.kmp-image){margin:1em 0}" +
       ":where(.kmp-image) img{display:block}" +
