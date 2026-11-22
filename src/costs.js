@@ -8,9 +8,11 @@
 // Cloudflare R2 Standard storage, checked 2026-11-22 at https://developers.cloudflare.com/r2/pricing/
 export const RATES = {
   storagePerGBMonth: 0.015, // dollars
-  uploadsPerMillion: 4.5, // "Class A" operations: each upload is one
+  uploadsPerMillion: 4.5, // "Class A" operations (writes, lists): each upload is one
+  readsPerMillion: 0.36, // "Class B" operations (reads that reach the bucket, not the CDN cache)
   freeGBMonths: 10, // free each month, across the whole account
   freeUploads: 1_000_000,
+  freeReads: 10_000_000,
   source: "https://developers.cloudflare.com/r2/pricing/",
   checked: "2026-11-22",
 };
@@ -73,43 +75,95 @@ export function nextRenewal(since, now) {
 }
 
 /*
- * mine:        this blog's stored things   [{ bytes, from, to }]
- * everyone:    every blog's stored things  (to share out the free allowance)
+ * mine:        this blog's stored things in R2   [{ bytes, from, to }]
+ * everyone:    every blog's stored things in R2  (to split the blog bucket between friends)
  * myUploads / allUploads: upload times (ms)
- * otherGB:     what the account's other buckets hold (not tracked here; set in wrangler.jsonc)
+ * measured:    Cloudflare's own numbers by month, from r2usage.js (may be empty)
+ * otherGB:     estimate of the account's other buckets, used only for months with no measurements
  * start:       when the blog began (ms)
+ *
+ * For each month, Cloudflare's measurements win when there are any:
+ *   - the account's real total storage and requests decide how much is over the free allowance;
+ *   - the blog bucket's real total is split between friends by the sizes recorded here
+ *     (Cloudflare measures buckets, not people), uploads by who uploaded, reads by share of storage.
+ * Months without measurements fall back to estimates from the recorded sizes.
  *
  * Returns months newest first, plus all-time totals. Dollar amounts are unrounded.
  */
-export function costReport({ mine, everyone, myUploads, allUploads, domain, otherGB = 0, start, now, rates = RATES }) {
+export function costReport({ mine, everyone, myUploads, allUploads, domain, measured = {}, otherGB = 0, start, now, rates = RATES }) {
   const charges = domainCharges(domain?.since, domain?.cents, now);
+  const price = (gb, a, b) => gb * rates.storagePerGBMonth + (a / 1e6) * rates.uploadsPerMillion + (b / 1e6) * rates.readsPerMillion;
+
   const months = monthsSince(start, now).map(key => {
     const [ms, me] = monthRange(key);
     const elapsed = Math.min(1, Math.max(0, (now - ms) / (me - ms))); // the current month is partway through
-    const myGB = gbMonths(mine, key, now);
-    const accountGB = gbMonths(everyone, key, now) + otherGB * elapsed;
+    const estMyGB = gbMonths(mine, key, now);
+    const estBlogGB = gbMonths(everyone, key, now);
     const uploads = myUploads.filter(t => monthKey(t) === key).length;
-    const accountUploads = allUploads.filter(t => monthKey(t) === key).length;
+    const blogUploads = allUploads.filter(t => monthKey(t) === key).length;
+    const storageShare = estBlogGB > 0 ? estMyGB / estBlogGB : 0;
+    const m = measured[key];
 
-    const fullStorage = myGB * rates.storagePerGBMonth;
-    const fullUploads = (uploads / 1e6) * rates.uploadsPerMillion;
-    // Cloudflare only charges past the free allowance; this blog pays its share of anything over.
+    let myGB, myA, myB, accountGB, accountA, accountB, source;
+    if (m && m.days > 0) {
+      source = "measured";
+      if (m.blogGB != null) {
+        // The blog bucket as Cloudflare measured it, split by who stores what.
+        myGB = m.blogGB * storageShare;
+        myA = m.blogA * (blogUploads > 0 ? uploads / blogUploads : storageShare);
+        myB = m.blogB * storageShare;
+        accountGB = m.accountGB;
+        accountA = m.accountA;
+        accountB = m.accountB;
+      } else {
+        // The blog bucket wasn't in that month's measurements yet: other buckets measured, ours estimated.
+        myGB = estMyGB;
+        myA = uploads;
+        myB = 0;
+        accountGB = m.accountGB + estBlogGB;
+        accountA = m.accountA + blogUploads;
+        accountB = m.accountB;
+      }
+    } else {
+      source = "estimated";
+      myGB = estMyGB;
+      myA = uploads;
+      myB = 0;
+      accountGB = estBlogGB + otherGB * elapsed;
+      accountA = blogUploads;
+      accountB = 0;
+    }
+
+    // Cloudflare only charges past each month's free allowance (shared by the whole account);
+    // this blog pays its share of whatever is over.
     const overGB = Math.max(0, accountGB - rates.freeGBMonths);
-    const overUploads = Math.max(0, accountUploads - rates.freeUploads);
-    const chargedStorage = accountGB > 0 ? overGB * rates.storagePerGBMonth * (myGB / accountGB) : 0;
-    const chargedUploads = accountUploads > 0 ? (overUploads / 1e6) * rates.uploadsPerMillion * (uploads / accountUploads) : 0;
+    const overA = Math.max(0, accountA - rates.freeUploads);
+    const overB = Math.max(0, accountB - rates.freeReads);
+    const share = (mineX, allX) => (allX > 0 ? mineX / allX : 0);
+    const storageCharged =
+      overGB * rates.storagePerGBMonth * share(myGB, accountGB) +
+      (overA / 1e6) * rates.uploadsPerMillion * share(myA, accountA) +
+      (overB / 1e6) * rates.readsPerMillion * share(myB, accountB);
     const domainDollars = charges.filter(c => c.month === key).reduce((s, c) => s + c.dollars, 0);
 
     return {
       month: key,
       partial: elapsed < 1,
+      source,
       gbMonths: myGB,
       uploads,
-      fullPrice: fullStorage + fullUploads,
-      storageCharged: chargedStorage + chargedUploads,
+      fullPrice: price(myGB, myA, myB),
+      storageCharged,
       domain: domainDollars,
-      total: chargedStorage + chargedUploads + domainDollars,
-      accountGB,
+      total: storageCharged + domainDollars,
+      // The whole Cloudflare account's R2 for this month, for /admin.
+      account: {
+        gbMonths: accountGB,
+        classA: accountA,
+        classB: accountB,
+        fullPrice: price(accountGB, accountA, accountB),
+        charged: overGB * rates.storagePerGBMonth + (overA / 1e6) * rates.uploadsPerMillion + (overB / 1e6) * rates.readsPerMillion,
+      },
     };
   });
   const sum = k => months.reduce((s, m) => s + m[k], 0);
@@ -120,24 +174,23 @@ export function costReport({ mine, everyone, myUploads, allUploads, domain, othe
 }
 
 // Everything the Worker needs to read for a report, shaped for costReport.
-// Posts count as text: their row in the database, plus the .md copy of published ones.
+// Only what's stored in R2 is priced: files, and the .md copy of each published post. Posts' rows
+// in the database are covered by Cloudflare's included database storage.
 export async function loadCostData(env) {
   const toMs = s => (s ? Date.parse(s) : null);
   const { results: files } = await env.DB.prepare("SELECT user_id, size, created_at, deleted_at FROM files").all();
   const { results: posts } = await env.DB.prepare(
-    `SELECT user_id, created_at, published,
-       length(CAST(title AS BLOB)) + length(CAST(body_md AS BLOB)) + length(CAST(body_html AS BLOB)) + length(CAST(fields_json AS BLOB)) AS db_bytes,
-       length(CAST(title AS BLOB)) + length(CAST(body_md AS BLOB)) + 20 AS md_bytes
-     FROM posts`
+    `SELECT user_id, created_at, length(CAST(title AS BLOB)) + length(CAST(body_md AS BLOB)) + 20 AS md_bytes
+     FROM posts WHERE published = 1`
   ).all();
   const items = [];
   for (const f of files) items.push({ user: f.user_id, kind: "files", bytes: f.size, from: toMs(f.created_at), to: toMs(f.deleted_at) });
-  for (const p of posts) items.push({ user: p.user_id, kind: "text", bytes: p.db_bytes + (p.published ? p.md_bytes : 0), from: toMs(p.created_at), to: null });
+  for (const p of posts) items.push({ user: p.user_id, kind: "text", bytes: p.md_bytes, from: toMs(p.created_at), to: null });
   const uploads = files.map(f => ({ user: f.user_id, at: toMs(f.created_at) }));
   return { items, uploads };
 }
 
-export function reportFor(user, data, { otherGB, now }) {
+export function reportFor(user, data, { otherGB, measured, now }) {
   const mine = data.items.filter(i => i.user === user.id);
   return costReport({
     mine,
@@ -145,6 +198,7 @@ export function reportFor(user, data, { otherGB, now }) {
     myUploads: data.uploads.filter(u => u.user === user.id).map(u => u.at),
     allUploads: data.uploads.map(u => u.at),
     domain: { since: user.domain_since, cents: user.domain_cost_cents },
+    measured,
     otherGB,
     // From whichever came first: the account, its first file or post, or its domain.
     start: Math.min(Date.parse(user.created_at) || now, ...mine.map(i => i.from), Date.parse(user.domain_since) || now),

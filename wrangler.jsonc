@@ -29,7 +29,11 @@
     // `npx wrangler r2 bucket info <bucket>` now and then.
     "OTHER_STORAGE_GB": "0.1",
     // Who domains are registered and paid for through, as friends see it.
-    "HOST_NAME": "Reaction Future Institute"
+    "HOST_NAME": "Reaction Future Institute",
+    // Cloudflare's own R2 measurements (src/r2usage.js) need the account and this site's bucket.
+    // Also needs the secret CF_ANALYTICS_TOKEN: an API token with only "Account Analytics: Read".
+    "CF_ACCOUNT_ID": "649c6a97581779191e3dc398a800044b",
+    "BLOG_BUCKET": "blog-cdn-files"
   },
   "d1_databases": [
     {
@@ -39,6 +43,8 @@
       "migrations_dir": "migrations"
     }
   ],
-  "r2_buckets": [{ "binding": "FILES", "bucket_name": "blog-cdn-files" }]
+  "r2_buckets": [{ "binding": "FILES", "bucket_name": "blog-cdn-files" }],
+  // Once a day, copy Cloudflare's R2 usage numbers into D1 (they only keep ~13 weeks).
+  "triggers": { "crons": ["20 6 * * *"] }
   // Secret (not in this file): ADMIN_PASSWORD.
 }

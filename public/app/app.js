@@ -390,15 +390,19 @@ async function costs() {
     const skipped = u.months.length - shown.length;
     const rows = shown
       .map(
-        m => `<tr>
-          <td>${monthName(m.month, m.partial)}</td>
+        m => {
+          // Only storage can be estimated; a month with nothing but a domain payment is exact.
+          const est = m.source === "estimated" && (m.gbMonths > 0 || m.uploads > 0);
+          return `<tr${est ? ' class="est" title="estimated from your files: cloudflare\'s numbers for this month aren\'t here yet"' : ""}>
+          <td>${monthName(m.month, m.partial)}${est ? " · est." : ""}</td>
           <td>${size(m.gbMonths * 1e9)}</td>
           <td>${m.uploads}</td>
           <td>${money(m.fullPrice)}</td>
           <td>${money(m.storageCharged)}</td>
           ${u.domain ? `<td>${m.domain ? money(m.domain) : "–"}</td>` : ""}
           <td><b>${money(m.total)}</b></td>
-        </tr>`
+        </tr>`;
+        }
       )
       .join("");
     const t = u.allTime;
@@ -413,7 +417,11 @@ async function costs() {
         <tfoot><tr><td>all time</td><td></td><td>${t.uploads}</td><td>${money(t.fullPrice)}</td><td>${money(t.storageCharged)}</td>${u.domain ? `<td>${money(t.domain)}</td>` : ""}<td><b>${money(t.total)}</b></td></tr></tfoot>
       </table></div>
       ${skipped ? `<p class="muted" style="font-size:15px">${skipped} month${skipped === 1 ? "" : "s"} with nothing stored or paid aren't shown.</p>` : ""}
-      <p class="muted" style="font-size:15px">how this is worked out: your photos, files and writing are stored with Cloudflare R2, at $${u.rates.storagePerGBMonth} per GB a month, plus $${u.rates.uploadsPerMillion} per million uploads ("full price"). every month the first ${u.rates.freeGBMonths} GB and ${(u.rates.freeUploads / 1e6).toFixed(0)} million uploads are free, shared by all of ${host}'s sites, so "storage cost" is your share of anything over that. readers viewing your posts and photos don't add to it. prices from <a href="${esc(u.rates.source)}" target="_blank" rel="noopener">cloudflare</a>, checked ${esc(u.rates.checked)}.</p>`;
+      <p class="muted" style="font-size:15px">how this is worked out: your photos, files and published writing are stored with Cloudflare R2.
+        ${u.measuredThrough ? `storage and requests come from cloudflare's own measurements (up to ${esc(u.measuredThrough)}), split between blogs by who stores what. months marked "est." are estimated from your files instead.` : `these are estimates from your files until cloudflare's own measurements are synced.`}
+        "full price" is R2's list price: $${u.rates.storagePerGBMonth} per GB a month, $${u.rates.uploadsPerMillion} per million uploads and $${u.rates.readsPerMillion} per million reads.
+        every month the first ${u.rates.freeGBMonths} GB, ${(u.rates.freeUploads / 1e6).toFixed(0)} million uploads and ${(u.rates.freeReads / 1e6).toFixed(0)} million reads are free, shared by all of ${host}'s sites, so "storage cost" is your share of anything over that.
+        prices from <a href="${esc(u.rates.source)}" target="_blank" rel="noopener">cloudflare</a>, checked ${esc(u.rates.checked)}.</p>`;
   } catch (err) {
     box.innerHTML = `<p class="problem">${esc(err.message)}</p>`;
   }

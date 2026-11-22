@@ -406,3 +406,43 @@ test("each blog sees its own costs; deleted files stay on record; admin can add 
   assert.ok(u.allTime.domain >= 20.88); // paid in 2024 and 2025 at least
   assert.equal((await archie(`/admin/users/${id}/domain`, { method: "POST", form: { domain: "nope nope" } })).status, 400);
 });
+
+test("costs use Cloudflare's measurements once synced; a failed sync is reported, not fatal", async () => {
+  env.BLOG_BUCKET = "blog-cdn-files";
+  try {
+    // Without a token the sync records why, and costs stay estimated.
+    const failed = await archie("/admin/sync-usage", { method: "POST" });
+    assert.match(await failed.text(), /CF_ANALYTICS_TOKEN or CF_ACCOUNT_ID isn&#39;t set/);
+
+    const me = browser("14.0.0.1");
+    await me("/login", { method: "POST", form: { username: "cost-test", password: "cost-password-1" } });
+    let u = await (await me("/api/usage")).json();
+    assert.equal(u.months[0].source, "estimated");
+    assert.equal(u.measuredThrough, null);
+    assert.ok(!("account" in u.months[0])); // account-wide numbers stay on /admin
+
+    // A sync with a token (Cloudflare faked) stores the measurements.
+    const today = new Date().toISOString().slice(0, 10);
+    const fakeFetch = async () =>
+      new Response(JSON.stringify({ data: { viewer: { accounts: [{
+        storage: [
+          { max: { payloadSize: 5e9, metadataSize: 0 }, dimensions: { date: today, bucketName: "blog-cdn-files" } },
+          { max: { payloadSize: 1e8, metadataSize: 0 }, dimensions: { date: today, bucketName: "ear-site" } },
+        ],
+        ops: [{ sum: { requests: 40 }, dimensions: { date: today, bucketName: "blog-cdn-files", actionType: "GetObject" } }],
+      }] } } }));
+    const { syncR2Usage } = await import("../src/r2usage.js");
+    const s = await syncR2Usage({ ...env, CF_ANALYTICS_TOKEN: "t", CF_ACCOUNT_ID: "a" }, { fetchImpl: fakeFetch });
+    assert.equal(s.ok, true);
+
+    u = await (await me("/api/usage")).json();
+    assert.equal(u.months[0].source, "measured");
+    assert.equal(u.measuredThrough, today);
+    const page = await (await archie("/admin")).text();
+    assert.match(page, /cloudflare r2, whole account/);
+    assert.match(page, new RegExp(`synced through <b>${today}</b>`));
+    assert.match(page, /<td>measured<\/td>/);
+  } finally {
+    delete env.BLOG_BUCKET;
+  }
+});

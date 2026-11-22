@@ -26,7 +26,13 @@ One Cloudflare Worker (`blog-cdn`) on the Reaction Future Institute account, plu
 - **Costs** (`src/costs.js`): settings shows each friend what their blog costs, month by month and all time. Archie sees an all-time column at `/admin`.
   - Storage is billed like R2: the average GB stored over the month, at `$0.015` per GB-month, plus `$4.50` per million uploads. The rates are in `RATES`, checked 2026-11-22.
   - Cloudflare's free 10 GB-months and 1M uploads each month are shared across the whole account. A blog only pays its share of anything over that.
-  - **`OTHER_STORAGE_GB`** in `wrangler.jsonc` is what the account's *other* buckets hold, since the free allowance counts them too. Update it now and then with `npx wrangler r2 bucket info <bucket>`.
+  - **Cloudflare's own numbers** (`src/r2usage.js`): once a day (cron in `wrangler.jsonc`) the Worker copies R2's measured storage and request counts for every bucket on the account into D1 (`r2_usage_daily`). Cloudflare's analytics only keep about 13 weeks, so this copy is the history.
+    - Each month's free allowance and charge come from the account's real totals. The blog bucket's real total is split between friends by the file sizes recorded here, because Cloudflare measures buckets, not people.
+    - `/admin` shows the whole account's R2 by month, the sync status, and a **sync from cloudflare now** button. "charged" there should match the R2 lines on the bill.
+    - Needs the secret `CF_ANALYTICS_TOKEN` (an API token with only **Account Analytics: Read**), plus the `CF_ACCOUNT_ID` and `BLOG_BUCKET` vars.
+    - Months with no measurements (before the first sync, or locally) fall back to estimates. They're marked "est." for friends and "estimated" on `/admin`.
+    - Locally: `CF_ANALYTICS_TOKEN=$(npx wrangler auth token) node scripts/sync-usage-local.mjs` loads the real numbers into the dev database.
+  - **`OTHER_STORAGE_GB`** in `wrangler.jsonc` is only used for estimated months: roughly what the account's *other* buckets hold.
   - Deleted files keep their row (`deleted_at`), so past months stay right.
   - **Domains**: at `/admin`, Archie can record a friend's domain paid for through Reaction Future Institute (`HOST_NAME`), with its yearly price and the date it was first paid for. It's charged in that month and every anniversary, and the friend sees it with its next renewal date.
 - **Agent keys**: a friend can make a revocable key (settings → "let an AI agent set up your blog").
@@ -87,6 +93,7 @@ npm test         # unit tests + the real Worker against a throwaway local D1/R2
 npx wrangler d1 create blog-cdn                 # put the database_id it prints into wrangler.jsonc
 npx wrangler r2 bucket create blog-cdn-files
 npx wrangler secret put ADMIN_PASSWORD
+npx wrangler secret put CF_ANALYTICS_TOKEN     # API token with only "Account Analytics: Read" (for real R2 costs)
 ```
 
 Then in the Cloudflare dashboard:

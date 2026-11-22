@@ -23,7 +23,8 @@ import { renderInline, renderMarkdown } from "./markdown.js";
 import { cacheControlFor, checkUpload, cleanDomain, cleanFileText, cleanPost, cleanSettings, contentMatches, isImage, usernameProblem } from "./rules.js";
 import { jsonFeed, postMarkdownFile, postMdKey, publicImage, publicPost, publicUser, rssFeed } from "./feeds.js";
 import { homePage, loadHome } from "./home.js";
-import { loadCostData, nextRenewal, RATES, reportFor, storedNow } from "./costs.js";
+import { costReport, loadCostData, nextRenewal, RATES, reportFor, storedNow } from "./costs.js";
+import { measuredByMonth, syncR2Usage, syncStatus } from "./r2usage.js";
 import { cleanFieldDefs, cleanPostFields, listQuery, parseJson } from "./fields.js";
 import { adminLoginPage, adminPage, dashboardPage, loginPage, simplePage } from "./pages.js";
 import { html, json, now, readJson, redirect } from "./util.js";
@@ -40,6 +41,11 @@ export default {
       if (new URL(request.url).pathname.startsWith("/api/")) return json({ error: "Something went wrong on our end. Try again." }, 500);
       return html(simplePage("something went wrong", "the site hit an error. try again in a minute."), 500);
     }
+  },
+
+  // Daily (see "triggers" in wrangler.jsonc): copy Cloudflare's R2 usage numbers into D1.
+  async scheduled(event, env, ctx) {
+    ctx.waitUntil(syncR2Usage(env).then(s => s.error && console.error("R2 usage sync:", s.error)));
   },
 };
 
@@ -154,7 +160,12 @@ async function admin(path, method, request, env) {
     return redirect("/admin");
   }
 
-  if (path === "/admin" && method === "GET") return html(adminPage(await listUsers(env)));
+  if (path === "/admin" && method === "GET") return html(adminPage(await listUsers(env), null, await accountUsage(env)));
+  if (path === "/admin/sync-usage" && method === "POST") {
+    const s = await syncR2Usage(env);
+    const note = s.ok ? { text: `got ${s.days} days of usage from Cloudflare.` } : { text: `couldn't get usage from Cloudflare: ${s.error}`, problem: true };
+    return html(adminPage(await listUsers(env), note, await accountUsage(env)));
+  }
 
   if (path === "/admin/users" && method === "POST") {
     const form = await request.formData();
@@ -219,9 +230,29 @@ async function listUsers(env) {
   ).all();
   // All-time cost per friend, for the admin table.
   const data = await loadCostData(env);
+  const measured = await measuredByMonth(env.DB, env.BLOG_BUCKET);
   const now = Date.now();
-  for (const u of results) u.cost = reportFor(u, data, { otherGB: Number(env.OTHER_STORAGE_GB) || 0, now }).allTime;
+  for (const u of results) u.cost = reportFor(u, data, { otherGB: Number(env.OTHER_STORAGE_GB) || 0, measured, now }).allTime;
   return results;
+}
+
+// The whole Cloudflare account's R2, month by month, for /admin.
+async function accountUsage(env) {
+  const now = Date.now();
+  const data = await loadCostData(env);
+  const measured = await measuredByMonth(env.DB, env.BLOG_BUCKET);
+  const firsts = [...data.items.map(i => i.from), ...Object.keys(measured).map(m => Date.parse(`${m}-01T00:00:00Z`))].filter(Boolean);
+  const report = costReport({
+    mine: [],
+    everyone: data.items,
+    myUploads: [],
+    allUploads: data.uploads.map(u => u.at),
+    measured,
+    otherGB: Number(env.OTHER_STORAGE_GB) || 0,
+    start: firsts.length ? Math.min(...firsts) : now,
+    now,
+  });
+  return { months: report.months.map(m => ({ month: m.month, partial: m.partial, source: m.source, ...m.account })), sync: await syncStatus(env.DB) };
 }
 
 // ---- dashboard API ----
@@ -252,10 +283,14 @@ async function api(path, method, request, env, user, url) {
   if (path === "/api/usage" && method === "GET") {
     const now = Date.now();
     const data = await loadCostData(env);
-    const report = reportFor(user, data, { otherGB: Number(env.OTHER_STORAGE_GB) || 0, now });
+    const measured = await measuredByMonth(env.DB, env.BLOG_BUCKET);
+    const report = reportFor(user, data, { otherGB: Number(env.OTHER_STORAGE_GB) || 0, measured, now });
+    const sync = await syncStatus(env.DB);
     return json({
       ...report,
       stored: storedNow(data, user.id),
+      measuredThrough: sync.through,
+      months: report.months.map(({ account, ...m }) => m), // the account-wide numbers are for /admin
       rates: RATES,
       hostName: env.HOST_NAME || "Reaction Future Institute",
       domain: user.domain

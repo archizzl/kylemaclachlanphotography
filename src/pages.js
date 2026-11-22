@@ -58,7 +58,39 @@ ${message ? `<p class="problem">${e(message)}</p>` : ""}
 const kb = n => (n >= 1048576 ? `${(n / 1048576).toFixed(1)} MB` : `${Math.ceil(n / 1024)} KB`);
 
 // users: rows with post and file counts. note: { text, password? } shown at the top after an action.
-export function adminPage(users, note = null) {
+const size = b => (b >= 1e9 ? `${(b / 1e9).toFixed(2)} GB` : b >= 1e6 ? `${(b / 1e6).toFixed(1)} MB` : b >= 1e3 ? `${Math.round(b / 1e3)} KB` : b > 0 ? "<1 KB" : "0 KB");
+const monthName = (key, partial) =>
+  new Date(`${key}-01T12:00:00Z`).toLocaleDateString("en-US", { month: "short", year: "numeric", timeZone: "UTC" }) + (partial ? " (so far)" : "");
+
+// The whole Cloudflare account's R2, from Cloudflare's own measurements where synced.
+function usageSection(usage) {
+  if (!usage) return "";
+  const { months, sync } = usage;
+  const last = sync.last;
+  const status = sync.through
+    ? `cloudflare's numbers are synced through <b>${e(sync.through)}</b> (kept since ${e(sync.since)}).`
+    : "no numbers from cloudflare yet, so costs are estimated from the files recorded here.";
+  const problem = last && !last.ok ? `<p class="problem">last sync (${e(last.at.slice(0, 16).replace("T", " "))} UTC) failed: ${e(last.error)}</p>` : "";
+  const rows = months
+    .filter(m => m.partial || m.gbMonths > 0 || m.classA || m.classB)
+    .map(
+      m => `<tr${m.source === "estimated" ? ' class="est"' : ""}>
+  <td>${monthName(m.month, m.partial)}</td><td>${m.source}</td><td>${size(m.gbMonths * 1e9)}</td>
+  <td>${Math.round(m.classA).toLocaleString("en-US")}</td><td>${Math.round(m.classB).toLocaleString("en-US")}</td>
+  <td>${money(m.fullPrice)}</td><td><b>${money(m.charged)}</b></td></tr>`
+    )
+    .join("\n");
+  return `<section>
+<h2>cloudflare r2, whole account</h2>
+<p class="muted">${status} it updates daily; cloudflare only keeps about 13 weeks, so this site keeps its own copy.</p>
+${problem}
+<form method="post" action="/admin/sync-usage"><button type="submit">sync from cloudflare now</button></form>
+${rows ? `<table class="users usage"><thead><tr><th>month</th><th>source</th><th>stored (average)</th><th>writes (class A)</th><th>reads (class B)</th><th>full price</th><th>charged</th></tr></thead><tbody>${rows}</tbody></table>` : ""}
+<p class="muted">"charged" is what's over cloudflare's free 10 GB, 1M writes and 10M reads each month, at R2's list prices. it should match the R2 lines on the account's bill.</p>
+</section>`;
+}
+
+export function adminPage(users, note = null, usage = null) {
   const rows = users
     .map(
       u => `<tr class="${u.disabled ? "off" : ""}">
@@ -104,7 +136,7 @@ ${noteHtml}
 <section>
 <h2>add a friend</h2>
 <form method="post" action="/admin/users" class="row">
-  <label>username <input name="username" required pattern="[a-z0-9][a-z0-9-]{0,28}[a-z0-9]" autocapitalize="none" spellcheck="false" placeholder="maya"></label>
+  <label>username <input name="username" required pattern="[a-z0-9][a-z0-9\-]{0,28}[a-z0-9]" autocapitalize="none" spellcheck="false" placeholder="maya"></label>
   <label>blog name <input name="display_name" placeholder="maya's notebook"></label>
   <label>password <input name="password" type="text" autocomplete="off" placeholder="blank = make one"></label>
   <button type="submit">add</button>
@@ -116,6 +148,7 @@ ${noteHtml}
 <h2>everyone</h2>
 ${users.length ? `<table class="users"><thead><tr><th>blog</th><th>posts</th><th>files</th><th>cost, all time</th><th>status</th><th></th></tr></thead><tbody>${rows}</tbody></table>` : "<p>no one yet.</p>"}
 </section>
+${usageSection(usage)}
 </main>`,
     {
       bodyClass: "admin",

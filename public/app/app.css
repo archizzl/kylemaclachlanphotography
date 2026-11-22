@@ -145,3 +145,7 @@ details.explain summary { cursor: pointer; color: #00e; }
 details.explain dl { margin: 8px 0 0; }
 details.explain dt { margin-top: 10px; }
 details.explain dd { margin: 2px 0 0 16px; color: #333; }
+
+table.usage td { white-space: nowrap; }
+table.usage tr.est td { color: #888; font-style: italic; }
+table.costs tr.est td { color: #888; font-style: italic; }
