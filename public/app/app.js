@@ -182,7 +182,7 @@ async function editView(id) {
       <div class="preview" id="preview" aria-live="polite"></div>
     </div>
     <p class="cheats"><code>**bold**</code> <code>*italic*</code> <code>[link text](https://…)</code> <code>## heading</code>
-      <code>- list item</code> <code>&gt; quote</code> <code>![description](photo url)</code>. html is shown as plain text.</p>`
+      <code>- list item</code> <code>&gt; quote</code> <code>![description](photo url)</code> <code>++underline++</code> <code>~~strike~~</code> <code>[[box]]</code>. html is shown as plain text.</p>`
   );
   app.onclick = null;
 
@@ -221,6 +221,12 @@ async function editView(id) {
       for (const d of me.fields || []) {
         const box = document.getElementById(`field-${d.key}`);
         if (d.kind === "number" && box && post.fields?.[d.key] !== undefined) box.value = post.fields[d.key];
+      }
+      // New tags typed into an open tag field are now part of its list: redraw it as chips.
+      if ((me.fields || []).some(d => d.open)) {
+        me = await api("me");
+        $("#postfields").outerHTML = fieldInputs(me.fields, post.fields || {}, false);
+        $("#postfields")?.addEventListener("input", changed);
       }
       status.textContent = "saved";
       buttons();
@@ -272,9 +278,11 @@ function fieldInputs(defs, values, isNew) {
     .map(d => {
       const v = values[d.key];
       if (d.kind === "tags") {
-        return `<div class="pf"><span class="pf-name">${esc(d.name)}</span><span class="chips">${d.choices
+        // Open fields also take new tags, typed in; they join the list when the post is saved.
+        const extra = d.open ? (v || []).filter(t => !d.choices.includes(t)) : [];
+        return `<div class="pf"><span class="pf-name">${esc(d.name)}</span><span class="chips">${[...d.choices, ...extra]
           .map(c => `<label><input type="checkbox" name="${esc(d.key)}" value="${esc(c)}"${(v || []).includes(c) ? " checked" : ""}>${esc(c)}</label>`)
-          .join("")}</span></div>`;
+          .join("")}${d.open ? `<input class="newtags" data-key="${esc(d.key)}" placeholder="new tags, separated by commas" aria-label="new ${esc(d.name)}">` : ""}</span></div>`;
       }
       if (d.kind === "number") {
         const hint = d.auto && isNew ? "counts up by itself" : "";
@@ -288,7 +296,11 @@ function fieldInputs(defs, values, isNew) {
 function readFieldInputs(defs) {
   const out = {};
   for (const d of defs) {
-    if (d.kind === "tags") out[d.key] = [...app.querySelectorAll(`#postfields input[name="${CSS.escape(d.key)}"]:checked`)].map(i => i.value);
+    if (d.kind === "tags") {
+      const checked = [...app.querySelectorAll(`#postfields input[name="${CSS.escape(d.key)}"]:checked`)].map(i => i.value);
+      const typed = (app.querySelector(`#postfields .newtags[data-key="${CSS.escape(d.key)}"]`)?.value || "").split(",").map(s => s.trim()).filter(Boolean);
+      out[d.key] = [...checked, ...typed];
+    }
     else {
       const v = document.getElementById(`field-${d.key}`)?.value ?? "";
       if (v !== "") out[d.key] = d.kind === "number" ? Number(v) : v;
@@ -313,7 +325,8 @@ function fieldsEditor() {
             <label>kind <select data-k="kind">${Object.entries(kinds).map(([k, l]) => `<option value="${k}"${d.kind === k ? " selected" : ""}>${l}</option>`).join("")}</select></label>
             <span class="buttons"><button type="button" data-move="-1" title="move up"${i ? "" : " disabled"}>↑</button><button type="button" data-move="1" title="move down"${i < defs.length - 1 ? "" : " disabled"}>↓</button><button type="button" class="danger" data-remove>remove</button></span>
           </div>
-          ${d.kind === "tags" ? `<label>tags, separated by commas <input data-k="choices" value="${esc((d.choices || []).join(", "))}" placeholder="tender, restless, hopeful, giddy"></label>` : ""}
+          ${d.kind === "tags" ? `<label>tags, separated by commas <input data-k="choices" value="${esc((d.choices || []).join(", "))}" placeholder="tender, restless, hopeful, giddy"></label>
+          <label class="check"><input type="checkbox" data-k="open"${d.open ? " checked" : ""}> let me type new tags while writing (they're added here)</label>` : ""}
           ${d.kind === "number" ? `<label class="check"><input type="checkbox" data-k="auto"${d.auto ? " checked" : ""}> number new posts automatically (1, 2, 3…)</label>` : ""}
           ${d.key ? `<p class="muted" style="margin:4px 0 0;font-size:14px">in embed codes this field is called <code>${esc(d.key)}</code></p>` : ""}
         </div>`
@@ -329,6 +342,7 @@ function fieldsEditor() {
     if (!row || !k) return;
     const d = defs[row.dataset.i];
     if (k === "auto") d.auto = ev.target.checked;
+    else if (k === "open") d.open = ev.target.checked;
     else if (k === "choices") d.choices = ev.target.value.split(",").map(s => s.trim()).filter(Boolean);
     else d[k] = ev.target.value;
     if (k === "kind" && ev.type === "change") draw();

@@ -494,3 +494,38 @@ test("the admin dashboard shows billing for the whole app", async () => {
   assert.match(page, /<td>all time<\/td><td>[^<]*<\/td><td>\$\d+\.\d\d<\/td>/);
   assert.ok(!page.includes("<td>all time</td><td>$0.00</td><td>$0.00</td>"));
 });
+
+
+test("one-letter usernames work end to end", async () => {
+  const page = await (await archie("/admin/users", { method: "POST", form: { username: "b", password: "b-password-123" } })).text();
+  assert.match(page, /added b\./);
+  const b = browser("16.0.0.1");
+  assert.equal((await b("/login", { method: "POST", form: { username: "b", password: "b-password-123" } })).status, 303);
+  await b("/api/posts", { method: "POST", body: { title: "hi from b", published: 1 } });
+  assert.equal((await b("/b/posts.json?z")).status, 200);
+  assert.equal((await b("/b/hi-from-b.json?z")).status, 200);
+});
+
+test("open tags grow as posts are written, and the brief list has every post without bodies", async () => {
+  await archie("/admin/users", { method: "POST", form: { username: "archietest", password: "archie-password-1" } });
+  const a = browser("17.0.0.1");
+  await a("/login", { method: "POST", form: { username: "archietest", password: "archie-password-1" } });
+  await a("/api/fields", { method: "PUT", body: { fields: [{ name: "tags", kind: "tags", open: true, choices: [] }] } });
+  for (let i = 0; i < 60; i++) {
+    await a("/api/posts", { method: "POST", body: { title: `post ${i}`, date: `2026-0${1 + (i % 9)}-1${i % 9}`, body: "words ".repeat(50), published: 1, fields: { tags: i % 2 ? ["nyc", "bluegrass"] : ["work"] } } });
+  }
+  const me = await (await a("/api/me")).json();
+  assert.deepEqual(me.fields[0].choices.sort(), ["bluegrass", "nyc", "work"]);
+
+  const full = await (await a("/archietest/posts.json?limit=1000&f")).json();
+  assert.equal(full.posts.length, 50); // full posts are still capped
+  const brief = await (await a("/archietest/posts.json?brief=1&limit=1000&b")).json();
+  assert.equal(brief.posts.length, 60);
+  assert.ok(!("html" in brief.posts[0]));
+  assert.deepEqual(Object.keys(brief.posts[0]).sort(), ["date", "fields", "slug", "title", "updated", "url"]);
+  assert.deepEqual(brief.user.fields[0], { key: "tags", name: "tags", kind: "tags", open: true }); // no tag list
+  const page2 = await (await a("/archietest/posts.json?brief=1&limit=25&offset=50&o")).json();
+  assert.equal(page2.posts.length, 10);
+  const tagged = await (await a("/archietest/posts.json?brief=1&limit=1000&filter=tags:nyc&filter=tags:bluegrass&t")).json();
+  assert.equal(tagged.posts.length, 30);
+});

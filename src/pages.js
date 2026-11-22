@@ -203,12 +203,12 @@ ${users.length ? `<table class="users"><thead><tr><th>blog</th><th>status</th><t
 <section>
 <h2>add a friend</h2>
 <form method="post" action="/admin/users" class="row">
-  <label>username <input name="username" required pattern="[a-z0-9][a-z0-9\\-]{0,28}[a-z0-9]" autocapitalize="none" spellcheck="false" placeholder="maya"></label>
+  <label>username <input name="username" required pattern="[a-z0-9]([a-z0-9\\-]{0,28}[a-z0-9])?" title="1–30 lowercase letters, numbers or dashes (not at the start or end)" autocapitalize="none" spellcheck="false" placeholder="maya"></label>
   <label>blog name <input name="display_name" placeholder="maya's notebook"></label>
   <label>password <input name="password" type="text" autocomplete="off" placeholder="blank = make one"></label>
   <button type="submit">add</button>
 </form>
-<p class="muted">they log in at <a href="/login">/login</a>. their files go to <code>cdn…/username/</code>.</p>
+<p class="muted">usernames: 1–30 lowercase letters, numbers or dashes. they log in at <a href="/login">/login</a>. their files go to <code>cdn…/username/</code>.</p>
 </section>
 ${usageSection(usage)}
 </main>`,

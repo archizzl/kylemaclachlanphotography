@@ -2,7 +2,7 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { cleanFieldDefs, cleanPostFields, fieldKey, listQuery } from "../src/fields.js";
+import { cleanFieldDefs, cleanPostFields, fieldKey, growChoices, listQuery } from "../src/fields.js";
 
 const DEFS = [
   { key: "emotion", name: "emotion", kind: "tags", choices: ["tender", "restless", "hopeful"] },
@@ -53,4 +53,22 @@ test("filters and sorts only use known fields", () => {
   assert.equal(listQuery(DEFS, new URLSearchParams("sort=emotion")).order, "p.date DESC, p.id DESC"); // tags can't sort
   assert.equal(listQuery(DEFS, new URLSearchParams("sort=date")).order, "p.date ASC, p.id ASC");
   assert.equal(listQuery(DEFS, new URLSearchParams("sort=x') --")).order, "p.date DESC, p.id DESC");
+});
+
+test("open tag fields take any tag and learn new ones", () => {
+  const [defs, problem] = cleanFieldDefs([{ name: "tags", kind: "tags", open: true, choices: "" }]);
+  assert.equal(problem, null);
+  assert.deepEqual(defs[0], { key: "tags", name: "tags", kind: "tags", choices: [], open: true });
+  // A closed field still needs choices.
+  assert.ok(cleanFieldDefs([{ name: "tags", kind: "tags", choices: "" }])[1]);
+
+  const withNyc = [{ ...defs[0], choices: ["nyc"] }];
+  const values = cleanPostFields(withNyc, { tags: ["NYC", "bluegrass", " bluegrass ", "", "x".repeat(60)] });
+  assert.deepEqual(values.tags, ["nyc", "bluegrass", "x".repeat(40)]); // known spelling kept, dupes dropped, trimmed
+  assert.deepEqual(cleanPostFields(withNyc, { tags: "work, interior-design" }).tags, ["work", "interior-design"]);
+  assert.equal(cleanPostFields(withNyc, { tags: Array.from({ length: 30 }, (_, i) => `t${i}`) }).tags.length, 20);
+
+  const grown = growChoices(withNyc, values);
+  assert.deepEqual(grown[0].choices, ["nyc", "bluegrass", "x".repeat(40)]);
+  assert.equal(growChoices(withNyc, { tags: ["nyc"] }), null); // nothing new
 });

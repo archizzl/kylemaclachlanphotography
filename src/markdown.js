@@ -7,7 +7,36 @@
 import MarkdownIt from "markdown-it";
 
 // breaks: a single Enter is a line break, as people expect (and poems need).
-const md = new MarkdownIt({ html: false, linkify: true, typographer: true, breaks: true });
+// typographer is off: what people type is what readers see ("--" stays "--", quotes stay straight).
+const md = new MarkdownIt({ html: false, linkify: true, typographer: false, breaks: true });
+
+// Two extras, from archizzl.com's blog format:
+//   [[text]]    a small box around inline text   -> <span class="box">text</span>
+//   ++text++    underline                         -> <u>text</u>
+// Both can hold other formatting, like [[No ***Q*** train]].
+function wrapRule(name, open, close, tag, attrs) {
+  return (state, silent) => {
+    const start = state.pos;
+    const src = state.src;
+    if (!src.startsWith(open, start)) return false;
+    const end = src.indexOf(close, start + open.length);
+    if (end < 0 || end === start + open.length) return false;
+    if (!silent) {
+      const t = state.push(`${name}_open`, tag, 1);
+      for (const [k, v] of attrs) t.attrSet(k, v);
+      const oldMax = state.posMax;
+      state.pos = start + open.length;
+      state.posMax = end;
+      state.md.inline.tokenize(state);
+      state.posMax = oldMax;
+      state.push(`${name}_close`, tag, -1);
+    }
+    state.pos = end + close.length;
+    return true;
+  };
+}
+md.inline.ruler.before("link", "box", wrapRule("box", "[[", "]]", "span", [["class", "box"]]));
+md.inline.ruler.before("emphasis", "underline", wrapRule("underline", "++", "++", "u", []));
 
 // Links open normally but don't hand the friend's page to the target.
 const defaultLink = md.renderer.rules.link_open || ((tokens, i, options, env, self) => self.renderToken(tokens, i, options));

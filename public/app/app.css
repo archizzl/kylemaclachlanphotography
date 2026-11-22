@@ -168,3 +168,5 @@ tr.is-locked td { background: #fff5f2; }
 td.actions details summary { cursor: pointer; font-size: 14px; color: #666; }
 td.actions details form { margin-top: 6px; }
 .problem.locked { font-weight: bold; }
+.preview .box { display: inline-block; border: 1px solid currentColor; padding: 1px 8px; margin: 0 1px; border-radius: 3px; }
+.chips input.newtags { position: static; opacity: 1; pointer-events: auto; font-size: 15px; padding: 1px 8px; border-radius: 99px; width: 15em; }

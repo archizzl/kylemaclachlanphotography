@@ -36,6 +36,7 @@
       ":where(.kmp-post){display:block;margin:0 0 2.5em}" +
       ":where(.kmp-post, .kmp-image) img{max-width:100%;height:auto}" +
       ":where(.kmp-post) pre{overflow:auto}" +
+      ":where(.kmp-post) .box{display:inline-block;border:1px solid currentColor;padding:0 .4em;border-radius:3px}" +
       ":where(.kmp-post) blockquote{margin-left:0;padding-left:1em;border-left:2px solid currentColor;opacity:.85}" +
       ":where(.kmp-date){display:block;opacity:.6;font-size:.85em;margin:-.4em 0 1em}" +
       ":where(.kmp-fields){display:flex;flex-wrap:wrap;gap:.3em 1em;font-size:.85em;margin:-.6em 0 1em}" +
@@ -157,7 +158,7 @@
   // The values a field can take, in the blog's order (tags) or the order they first appear.
   function valuesInOrder(def, posts) {
     var seen = [];
-    (def.kind === "tags" ? def.choices : []).forEach(function (c) { seen.push(c); });
+    (def.kind === "tags" ? def.choices || [] : []).forEach(function (c) { seen.push(c); });
     posts.forEach(function (p) {
       valuesOf(p, def.key).forEach(function (v) {
         if (!seen.some(function (s) { return slug(s) === slug(v); })) seen.push(v);

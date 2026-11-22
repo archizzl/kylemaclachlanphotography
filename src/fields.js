@@ -1,10 +1,11 @@
 // Post fields each friend designs for their own blog, e.g.
 //   emotion  (tags: tender, restless, hopeful…)   number (auto-counting)   location (text)
 //
-// A definition: { key, name, kind: "tags" | "number" | "text", choices?: [..], auto?: bool }
+// A definition: { key, name, kind: "tags" | "number" | "text", choices?: [..], open?: bool, auto?: bool }
 //   key     the stable name used in embed codes (data-group="emotion") and stored values; set when
 //           the field is made, from its name, and never changed after (renaming only changes `name`)
 //   choices tags only: the allowed tags, in the order menus and groups show them
+//   open    tags only: any new tag can be typed while writing; it's added to `choices` when saved
 //   auto    number only: new posts get the next number automatically
 //
 // A post's values: { [key]: ["tender", "hopeful"] | 12 | "the 14 bus stop" }
@@ -12,6 +13,8 @@
 export const KINDS = ["tags", "number", "text"];
 export const MAX_FIELDS = 10;
 const MAX_CHOICES = 50;
+const MAX_OPEN_CHOICES = 300; // open tag fields grow as people write
+const MAX_TAGS_PER_POST = 20;
 const RESERVED = new Set(["date", "title", "slug", "id", "body", "html", "url"]);
 
 const oneLine = (v, max) => String(v ?? "").replace(/\s+/g, " ").trim().slice(0, max);
@@ -62,9 +65,12 @@ export function cleanFieldDefs(input, previous = []) {
         const t = oneLine(c, 40);
         if (t && !choices.some(x => x.toLowerCase() === t.toLowerCase())) choices.push(t);
       }
-      if (!choices.length) return [null, `Give "${name}" at least one tag to choose from.`];
-      if (choices.length > MAX_CHOICES) return [null, `"${name}" can have up to ${MAX_CHOICES} tags.`];
+      const open = Boolean(raw.open);
+      if (!choices.length && !open) return [null, `Give "${name}" at least one tag to choose from, or let new tags be typed while writing.`];
+      const max = open ? MAX_OPEN_CHOICES : MAX_CHOICES;
+      if (choices.length > max) return [null, `"${name}" can have up to ${max} tags.`];
       def.choices = choices;
+      if (open) def.open = true;
     }
     if (kind === "number") def.auto = Boolean(raw.auto);
     out.push(def);
@@ -79,8 +85,20 @@ export function cleanPostFields(defs, input) {
   for (const d of defs) {
     const v = src[d.key];
     if (d.kind === "tags") {
-      const picked = (Array.isArray(v) ? v : [v]).map(x => oneLine(x, 40)).filter(Boolean);
-      const valid = d.choices.filter(c => picked.some(p => p.toLowerCase() === c.toLowerCase()));
+      const picked = (Array.isArray(v) ? v : String(v ?? "").split(",")).map(x => oneLine(x, 40)).filter(Boolean);
+      let valid;
+      if (d.open) {
+        // Any tag goes; a known one keeps its usual spelling. Order is as typed.
+        valid = [];
+        for (const p of picked) {
+          const known = d.choices.find(c => c.toLowerCase() === p.toLowerCase());
+          const tag = known || p;
+          if (!valid.some(x => x.toLowerCase() === tag.toLowerCase())) valid.push(tag);
+        }
+        valid = valid.slice(0, MAX_TAGS_PER_POST);
+      } else {
+        valid = d.choices.filter(c => picked.some(p => p.toLowerCase() === c.toLowerCase()));
+      }
       if (valid.length) out[d.key] = valid;
     } else if (d.kind === "number") {
       const n = typeof v === "number" ? v : v === "" || v == null ? NaN : Number(v);
@@ -131,4 +149,18 @@ export function listQuery(defs, params) {
     order = `(${ex} IS NULL), ${ex} ${desc ? "DESC" : "ASC"}, p.date DESC, p.id DESC`;
   }
   return { where: where.length ? ` AND ${where.join(" AND ")}` : "", binds, order };
+}
+
+// Open tag fields learn new tags: returns the definitions with any new tags added, or null if
+// nothing changed.
+export function growChoices(defs, values) {
+  let changed = false;
+  const next = defs.map(d => {
+    if (d.kind !== "tags" || !d.open || !values[d.key]) return d;
+    const add = values[d.key].filter(t => !d.choices.some(c => c.toLowerCase() === t.toLowerCase()));
+    if (!add.length) return d;
+    changed = true;
+    return { ...d, choices: [...d.choices, ...add].slice(0, MAX_OPEN_CHOICES) };
+  });
+  return changed ? next : null;
 }

@@ -20,7 +20,7 @@ One Cloudflare Worker (`blog-cdn`) on the Reaction Future Institute account, plu
     - **post fields** and **agent keys** (both below);
     - change password.
 - **Post fields** (`src/fields.js`): each blog designs its own, up to 10.
-  - Kinds: `tags` (picked from a list, e.g. emotions), `number` (can count up by itself), and `text` (e.g. where it was written).
+  - Kinds: `tags` (picked from a list, e.g. emotions; or "open", so any tag can be typed while writing), `number` (can count up by itself), and `text` (e.g. where it was written).
   - Values show under each post's title in embeds and on the front page, and tags become RSS categories.
   - Lists can use them: `?filter=<key>:<value>` and `?sort=<key>` in the JSON API, and `data-filter`, `data-sort`, `data-group` and `data-menu` in embeds.
 - **Costs** (`src/costs.js`): settings shows each friend what their blog costs, month by month and all time. Archie sees an all-time column at `/admin`.
@@ -45,7 +45,10 @@ One Cloudflare Worker (`blog-cdn`) on the Reaction Future Institute account, plu
   - **Billing, whole app**: every blog's R2 share and domains added together by month, with a running total.
   - **Accounts**: set any password in one step (leave it blank and one is made and shown once), add domains, or switch an account off.
   - **Lockout**: **three wrong passwords in a row lock an account**, even against the right password. The login page warns how many tries are left, then says "text archie to reset your password". A "locked out" box at the top of `/admin` sets a new password, which unlocks it. A separate limit locks out an IP for 15 minutes after ten wrong passwords on any accounts.
-- **Posts** are stored in D1 (`migrations/`). The markdown is rendered to HTML when saved (`src/markdown.js`, markdown-it with HTML turned off, so anything typed as HTML shows as text). Each published post is also copied to R2 as `<user>/posts/<slug>.md`.
+- **Posts** are stored in D1 (`migrations/`). The markdown is rendered to HTML when saved (`src/markdown.js`, markdown-it with HTML turned off, so anything typed as HTML shows as text).
+  - A single Enter is a line break.
+  - There are no smart quotes or dashes.
+  - It adds `++underline++` and `[[box]]`, both from archizzl.com's format. Each published post is also copied to R2 as `<user>/posts/<slug>.md`.
 - **Files** go to the R2 bucket `blog-cdn-files` as `<user>/<name>`. They're served straight from the bucket's own domain, **`cdn.kylemaclachlanphotography.org`**, and never pass through the Worker.
   - Files are never overwritten. Uploading the same name again gets a new name, so images can be cached forever.
   - Accepted: JPEG, PNG, WebP, GIF, AVIF, PDF, `.md` and `.txt`, up to 25 MB. SVG and HTML are refused, and contents must match the extension (`src/rules.js`).
@@ -90,6 +93,10 @@ npm test         # unit tests + the real Worker against a throwaway local D1/R2
 
   Both are plain HTML files in `demo/` that use the same embed codes a friend would paste.
 - `demo/index.html` is a bare stand-in for a friend's site. Serve it on another port (launch config `blog-cdn-demo`, port 8128) and open `http://localhost:8128/?user=<name>&post=<slug>`, or `?user=<name>&list=5`.
+
+## archizzl.com
+
+archie's own blog moved here on 2026-11-22, as user `archie`, using `scripts/import-archizzl.mjs`. The script converts the old text-file format and keeps slugs and dates; running it again updates posts instead of duplicating them. archizzl.com keeps its own design: its homepage list and `/blog/post/?p=<slug>` pages read `/archie/posts.json?brief=1` and `/archie/<slug>.json` from here.
 
 ## live
 

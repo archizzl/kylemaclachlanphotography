@@ -36,6 +36,15 @@ test("a single Enter is a line break (poems keep their shape)", () => {
   assert.equal(renderMarkdown("one\ntwo\n\nthree"), "<p>one<br>\ntwo</p>\n<p>three</p>\n");
 });
 
+test("archizzl-style extras: [[box]], ++underline++, ~~strike~~, and text exactly as typed", () => {
+  assert.equal(renderMarkdown('[["No ***Q*** train"]]'), '<p><span class="box">&quot;No <em><strong>Q</strong></em> train&quot;</span></p>\n');
+  assert.equal(renderMarkdown("No ++habia servicio++ here"), "<p>No <u>habia servicio</u> here</p>\n");
+  assert.equal(renderMarkdown("~~gone~~"), "<p><s>gone</s></p>\n");
+  assert.equal(renderMarkdown('a -- b "c" (c)'), "<p>a -- b &quot;c&quot; (c)</p>\n"); // no smart dashes/quotes
+  assert.equal(renderMarkdown("[[open and ++open"), "<p>[[open and ++open</p>\n");
+  assert.ok(!renderMarkdown("[[<script>x</script>]]").includes("<script")); // still escaped inside
+});
+
 test("excerpt strips formatting and shortens", () => {
   assert.equal(excerpt("**Bold** and [a link](https://x.org) ![pic](y.jpg)"), "Bold and a link");
   assert.ok(excerpt("word ".repeat(200)).endsWith("…"));
@@ -55,8 +64,9 @@ test("passwords hash, verify and reject wrong ones", async () => {
 
 test("usernames are URL-safe and can't shadow site paths", () => {
   assert.equal(usernameProblem("maya"), null);
+  assert.equal(usernameProblem("b"), null); // one letter is fine
   assert.equal(usernameProblem("dj-fox-2"), null);
-  for (const bad of ["", "a", "Maya", "-maya", "maya-", "ma ya", "maya/x", "admin", "api", "login", "_cdn", "x".repeat(31)]) {
+  for (const bad of ["", "-", "Maya", "-maya", "maya-", "ma ya", "maya/x", "admin", "api", "login", "_cdn", "x".repeat(31)]) {
     assert.ok(usernameProblem(bad), bad);
   }
 });

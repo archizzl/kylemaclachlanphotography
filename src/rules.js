@@ -10,8 +10,8 @@ const RESERVED = new Set(
 
 export function usernameProblem(name) {
   const n = String(name || "");
-  if (!/^[a-z0-9](?:[a-z0-9-]{0,28}[a-z0-9])?$/.test(n) || n.length < 2) {
-    return "Usernames are 2–30 lowercase letters, numbers or dashes, and can't start or end with a dash.";
+  if (!/^[a-z0-9](?:[a-z0-9-]{0,28}[a-z0-9])?$/.test(n)) {
+    return "Usernames are 1–30 lowercase letters, numbers or dashes, and can't start or end with a dash.";
   }
   if (RESERVED.has(n)) return "That username is taken by the site itself. Pick another.";
   return null;

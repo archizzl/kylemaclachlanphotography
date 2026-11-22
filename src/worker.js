@@ -25,12 +25,13 @@ import { jsonFeed, postMarkdownFile, postMdKey, publicImage, publicPost, publicU
 import { homePage, loadHome } from "./home.js";
 import { appBilling, costReport, loadCostData, nextRenewal, RATES, reportFor, storedNow } from "./costs.js";
 import { measuredByMonth, syncR2Usage, syncStatus } from "./r2usage.js";
-import { cleanFieldDefs, cleanPostFields, listQuery, parseJson } from "./fields.js";
+import { cleanFieldDefs, cleanPostFields, growChoices, listQuery, parseJson } from "./fields.js";
 import { adminLoginPage, adminPage, dashboardPage, loginPage, simplePage } from "./pages.js";
 import { html, json, now, readJson, redirect } from "./util.js";
 
 const PUBLIC_CACHE_SECONDS = 60;
 const MAX_LIST = 50;
+const MAX_BRIEF = 1000;
 
 export default {
   async fetch(request, env, ctx) {
@@ -111,9 +112,9 @@ async function route(request, env, ctx) {
   }
 
   // ---- what other sites read ----
-  const pub = path.match(/^\/([a-z0-9-]{2,30})\/([a-z0-9-]{1,80})\.(json|xml)$/);
+  const pub = path.match(/^\/([a-z0-9-]{1,30})\/([a-z0-9-]{1,80})\.(json|xml)$/);
   if (pub && (method === "GET" || method === "HEAD")) return cachedPublic(request, ctx, () => publicRoute(pub[1], pub[2], pub[3], env, url));
-  const img = path.match(/^\/([a-z0-9-]{2,30})\/images\/([a-z0-9._-]{1,100})\.json$/);
+  const img = path.match(/^\/([a-z0-9-]{1,30})\/images\/([a-z0-9._-]{1,100})\.json$/);
   if (img && (method === "GET" || method === "HEAD")) return cachedPublic(request, ctx, () => publicImageRoute(img[1], img[2], env));
   if (method === "OPTIONS" && (pub || img)) return new Response(null, { status: 204, headers: CORS });
 
@@ -433,6 +434,12 @@ async function savePost(env, user, existing, input) {
   // Fields: only what this blog has set up. Auto-counting numbers fill themselves in on new posts.
   const defs = parseJson(user.fields_json, []);
   const fields = cleanPostFields(defs, input?.fields);
+  // New tags typed into an open tag field join that field's list.
+  const grown = growChoices(defs, fields);
+  if (grown) {
+    user.fields_json = JSON.stringify(grown);
+    await env.DB.prepare("UPDATE users SET fields_json = ? WHERE id = ?").bind(user.fields_json, user.id).run();
+  }
   if (!existing) {
     for (const d of defs) {
       if (d.kind !== "number" || !d.auto || fields[d.key] !== undefined) continue;
@@ -534,10 +541,10 @@ async function publicRoute(username, name, ext, env, url) {
   const opts = { origin: siteOrigin(env, url), cdnBase: base };
   // ?filter=<field>:<value> (repeatable) and ?sort=<field|date> (a leading - for descending).
   const q = listQuery(parseJson(user.fields_json, []), url.searchParams);
-  const recent = async limit =>
+  const recent = async (limit, offset = 0) =>
     (
-      await env.DB.prepare(`SELECT p.* FROM posts p WHERE p.user_id = ? AND p.published = 1${q.where} ORDER BY ${q.order} LIMIT ?`)
-        .bind(user.id, ...q.binds, limit)
+      await env.DB.prepare(`SELECT p.* FROM posts p WHERE p.user_id = ? AND p.published = 1${q.where} ORDER BY ${q.order} LIMIT ? OFFSET ?`)
+        .bind(user.id, ...q.binds, limit, offset)
         .all()
     ).results;
 
@@ -549,8 +556,17 @@ async function publicRoute(username, name, ext, env, url) {
     return json(jsonFeed(user, await recent(20), opts), 200, { ...headers, "content-type": "application/feed+json; charset=utf-8" });
   }
   if (name === "posts") {
-    const limit = Math.min(MAX_LIST, Math.max(1, Number(url.searchParams.get("limit")) || 10));
-    return json({ user: publicUser(user), posts: (await recent(limit)).map(p => publicPost(user, p, base)) }, 200, headers);
+    // ?brief=1 leaves the post bodies out, for an index of every post (up to 1000 at a time).
+    const brief = url.searchParams.get("brief") === "1";
+    const limit = Math.min(brief ? MAX_BRIEF : MAX_LIST, Math.max(1, Number(url.searchParams.get("limit")) || 10));
+    const offset = Math.min(1e6, Math.max(0, Number(url.searchParams.get("offset")) || 0));
+    const posts = (await recent(limit, offset)).map(p => {
+      const full = publicPost(user, p, base);
+      if (!brief) return full;
+      const { html, markdown_url, ...rest } = full;
+      return rest;
+    });
+    return json({ user: publicUser(user), posts }, 200, headers);
   }
   const post = await env.DB.prepare("SELECT * FROM posts WHERE user_id = ? AND slug = ? AND published = 1").bind(user.id, name).first();
   if (!post) return notFound();

@@ -79,7 +79,7 @@ Each blog designs its own fields. There are up to **10**, of three kinds:
 
 | kind | value on a post | use for | options |
 |---|---|---|---|
-| `tags` | a list of strings, chosen from `choices` | categories, emotions, series, topics | `choices`: up to 50 tags, in the order menus and groups show them |
+| `tags` | a list of strings, chosen from `choices` | categories, emotions, series, topics | `choices`: up to 50 tags, in the order menus and groups show them. `open: true` accepts any tag (up to 20 per post); new tags join `choices`, and the list isn't made public. Use it for free-form tagging. |
 | `number` | a number | issue or entry numbers, ratings, years | `auto: true`: new posts without a number get the highest so far + 1 |
 | `text` | one line, up to 200 characters | location, mood, weather, a soundtrack | none |
 
@@ -94,7 +94,7 @@ curl -s -X PUT https://kylemaclachlanphotography.org/api/fields -H "Authorizatio
 
 - The response gives each field a **`key`**: `emotion`, `no`, `written_at`. Keys are made from the name when the field is created, and never change. Use them in post values and embed codes.
 - To rename a field, or change its choices, send the whole list again with each existing field's `key` included. A field you leave out is removed, and its values stop showing.
-- A tag that isn't in `choices` is dropped when a post is saved. Set up every tag before importing.
+- On a normal tags field, a tag that isn't in `choices` is dropped when a post is saved, so set up every tag before importing. For a blog that tags freely, use `"open": true`.
 - Map their existing structure onto this. For example, WordPress categories and tags become `tags` fields, and a "#12" in titles becomes a `number` field, with the number taken out of the title.
 
 ## 5. Photos and files
@@ -158,7 +158,8 @@ Other post calls:
 
 ### Writing the body
 
-- The body is markdown (CommonMark, via markdown-it). It supports headings, **bold**, *italics*, links, lists, quotes, code, tables, ~~strikethrough~~ and images `![alt](url)`.
+- The body is markdown (CommonMark, via markdown-it). It supports headings, **bold**, *italics*, links, lists, quotes, code, tables, ~~strikethrough~~ and images `![alt](url)`, plus two extras: `++underline++` and `[[text]]`, which draws a small box around inline text (`<span class="box">`).
+- **Text appears exactly as typed.** There are no smart quotes, and `--` stays `--`.
 - **A single line break is kept.** Poems and addresses keep their shape. A blank line starts a new paragraph.
 - **Raw HTML is shown as text, not run.** Convert HTML posts to markdown. `<iframe>`, `<script>`, inline styles and embeds won't work.
 - Bare URLs become links. `javascript:` and similar links are removed.
@@ -221,6 +222,7 @@ Write CSS for these classes that copies their current design: fonts, colors, tit
 ## 8. Check your work (no key needed)
 
 - `GET /<user>/posts.json?limit=50&filter=emotion:tender&sort=-no` returns `{ user: { name, site, fields: [...] }, posts: [{ slug, title, date, html, url, markdown_url, fields }] }`.
+- `GET /<user>/posts.json?brief=1&limit=1000&offset=0` is the same list without the bodies, up to 1000 at a time. Use it for an index, archive or tag list on the person's own site.
 - `GET /<user>/<slug>.json` returns one post.
 - `GET /<user>/images/<file name>.json` returns one photo.
 - `GET /<user>/feed.xml` (RSS) and `/<user>/feed.json` (JSON Feed) are the feeds. Tags become categories.
@@ -233,6 +235,7 @@ Errors come back as `{"error": "a sentence you can show the person"}` with a 4xx
 ## A checklist to finish with
 
 - [ ] Every post is imported, with original dates and slugs. Drafts are still drafts.
+- [ ] If their site has its own list or post pages, they read `posts.json?brief=1` and `/<user>/<slug>.json`, so their design stays. `scripts/import-archizzl.mjs` in the blog-cdn repo is a full worked example: archizzl.com's text-file blog moved here.
 - [ ] Fields are set up, and every post has its values.
 - [ ] Images are uploaded, every image URL is replaced, and alt text is set.
 - [ ] Blog name, `site_url` and `post_url_pattern` are set.

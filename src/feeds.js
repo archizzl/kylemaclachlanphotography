@@ -27,7 +27,11 @@ export function publicUser(user) {
     name: user.display_name || user.username,
     site: user.site_url || null,
     // The blog's post fields, so embeds can label values and build menus in the blog's own order.
-    fields: defsOf(user).map(({ key, name, kind, choices }) => (choices ? { key, name, kind, choices } : { key, name, kind })),
+    // An open tag field's list isn't shared: it can include tags only used on drafts. Menus are
+    // built from the published posts instead.
+    fields: defsOf(user).map(({ key, name, kind, choices, open }) =>
+      open ? { key, name, kind, open } : choices ? { key, name, kind, choices } : { key, name, kind }
+    ),
   };
 }
 
