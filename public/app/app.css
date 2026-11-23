@@ -201,3 +201,8 @@ textarea.cssout { width: 100%; min-height: 260px; font-size: 14px; }
   .style-preview { position: static; }
   #stage { height: 60vh; }
 }
+
+/* embed builder (shares the style playground's layout) */
+.embedder .style-controls label.check { justify-content: flex-start; }
+.embedder .style-controls input:not([type=checkbox]) { width: 170px; font-size: 15px; display: inline-block; margin: 0; }
+.embedder #stage { height: 70vh; }

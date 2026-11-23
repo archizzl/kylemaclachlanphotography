@@ -1,6 +1,7 @@
-// The friend dashboard: posts, files, style, settings. Talks to /api/* in src/worker.js.
+// The friend dashboard: posts, files, embed, style, settings. Talks to /api/* in src/worker.js.
 
 import { CONTROLS, PRESETS, SITE_CONTROLS, cssFrom, siteFontStack } from "./stylekit.js";
+import { embedCode, sortChoices } from "./embedkit.js";
 
 const { username, cdnBase, origin } = window.KMP;
 const app = document.getElementById("app");
@@ -57,7 +58,6 @@ function postSnippet(post) {
   return `<script src="${embedOrigin}/embed.js" data-user="${username}" data-post="${post.slug}" async></script>
 <noscript><a href="${cdnBase}/${username}/posts/${post.slug}.md">${esc(post.title)}</a></noscript>`;
 }
-const listSnippet = (n = 10) => `<script src="${embedOrigin}/embed.js" data-user="${username}" data-list="${n}" async></script>`;
 
 function imageSnippet(f) {
   return `<script src="${embedOrigin}/embed.js" data-user="${username}" data-image="${f.name}" async></script>
@@ -99,7 +99,7 @@ function frame(active, inner) {
   const tab = (id, label) => `<a href="#${id}" class="${active === id ? "on" : ""}">${label}</a>`;
   document.querySelectorAll("dialog").forEach(d => d.remove());
   app.innerHTML = `<header class="top"><h1>${esc(me?.display_name || username)}</h1>
-    <nav>${tab("posts", "posts")}${tab("files", "files")}${tab("style", "style")}${tab("settings", "settings")}<a href="/logout">log out</a></nav></header>
+    <nav>${tab("posts", "posts")}${tab("files", "files")}${tab("embed", "embed")}${tab("style", "style")}${tab("settings", "settings")}<a href="/logout">log out</a></nav></header>
     <main>${inner}</main>`;
 }
 
@@ -111,12 +111,13 @@ window.addEventListener("hashchange", () => {
 window.addEventListener("beforeunload", ev => { if (dirty) { ev.preventDefault(); ev.returnValue = ""; } });
 
 async function render() {
-  const [view, id] = (location.hash.slice(1) || "posts").split("/");
+  const [view, id, extra] = (location.hash.slice(1) || "posts").split("/").map(decodeURIComponent);
   try {
     if (!me) me = await api("me");
     if (view === "files") return await filesView();
     if (view === "settings") return settingsView();
     if (view === "style") return await styleView();
+    if (view === "embed") return await embedView(id, extra);
     if (view === "edit") return await editView(id);
     return await postsView();
   } catch (err) {
@@ -143,13 +144,12 @@ async function postsView() {
   frame(
     "posts",
     `<div class="toolbar"><a class="button primary" href="#edit/new">new post</a>
-      <button data-act="list">embed all my posts</button></div>
+      <a class="button" href="#embed">embed my posts</a></div>
     ${posts.length ? `<ul class="list">${items}</ul>` : `<p>no posts yet. <a href="#edit/new">write your first one</a>.</p>`}`
   );
   app.onclick = async ev => {
     const t = ev.target;
-    if (t.dataset.act === "list") showSnippet("embed your latest posts", listSnippet(10), `<p class="muted">change <code>data-list="10"</code> to show more or fewer posts.</p>`);
-    if (t.dataset.embed) showSnippet("embed this post", postSnippet(posts.find(p => p.id == t.dataset.embed)));
+    if (t.dataset.embed) location.hash = `#embed/post/${encodeURIComponent(posts.find(p => p.id == t.dataset.embed).slug)}`;
     if (t.dataset.del) {
       const p = posts.find(x => x.id == t.dataset.del);
       if (!confirm(`Delete "${p.title}"? This can't be undone, and it disappears from every page it's embedded in.`)) return;
@@ -407,25 +407,6 @@ function fieldsEditor() {
   };
 }
 
-// Embed codes that use this blog's own fields.
-function fieldExamples() {
-  const tags = (me.fields || []).find(d => d.kind === "tags");
-  const num = (me.fields || []).find(d => d.kind === "number");
-  if (!tags && !num) return "";
-  const s = attrs => `<script src="${embedOrigin}/embed.js" data-user="${username}" data-list="50" ${attrs} async></script>`;
-  const ex = [];
-  if (tags) {
-    ex.push([`newest first, with buttons readers click to filter by ${tags.name} (the usual choice)`, s(`data-menu="${tags.key}" data-menu-label="filter by ${tags.name}"`)]);
-    ex.push([`only posts tagged "${tags.choices[0]}"`, s(`data-filter="${tags.key}:${tags.choices[0]}"`)]);
-  }
-  if (num) ex.push([`in ${num.name} order (put a - before it for highest first)`, s(`data-sort="${num.key}"`)]);
-  if (tags) ex.push([`an index page: a heading for each ${tags.name}, with its posts under it`, s(`data-group="${tags.key}"`)]);
-  return `<h3 style="font-size:1em;margin:18px 0 4px">using your fields</h3>${ex
-    .map(([label, code]) => `<p style="margin:10px 0 2px">${esc(label)}</p><p style="margin:0"><code>${esc(code)}</code> <button data-copycode="${esc(code)}">copy</button></p>`)
-    .join("")}
-    <p class="muted">you can mix these, like a menu plus number order. each post's values also show under its title (hide them with <code>data-fields="no"</code>).</p>`;
-}
-
 // ---- costs ----
 
 const money = d => (!d ? "$0.00" : d < 0.005 ? "<$0.01" : `$${d.toFixed(2)}`);
@@ -479,6 +460,110 @@ async function costs() {
   } catch (err) {
     box.innerHTML = `<p class="problem">${esc(err.message)}</p>`;
   }
+}
+
+// ---- embed builder ----
+// Pick what to show and how, see it with your real posts, copy the code.
+
+async function embedView(kind, which) {
+  const [{ posts }, { files }] = await Promise.all([api("posts"), api("files")]);
+  const published = posts.filter(p => p.published);
+  const photos = files.filter(f => f.content_type.startsWith("image/"));
+  const fields = me.fields || [];
+  const tagFields = fields.filter(f => f.kind === "tags" && (f.choices || []).length);
+  const saved = loadStyle();
+  const look = cssFrom(saved);
+
+  // Opened from a post or photo's "embed code" button: start with that one.
+  const o = { show: "list", count: 10, sort: "", filters: {}, menu: "", menuLabel: "", group: "", titles: true, fields: true, builtinStyle: true, caption: true, useLook: Boolean(look) };
+  if (kind === "post" && published.some(p => p.slug === which)) Object.assign(o, { show: "post", post: which });
+  if (kind === "photo" && photos.some(f => f.name === which)) Object.assign(o, { show: "photo", photo: which });
+  o.post ??= published[0]?.slug;
+  o.photo ??= photos[0]?.name;
+
+  const sel = (key, options, value) =>
+    `<select data-o="${key}">${options.map(([v, l]) => `<option value="${esc(v)}"${String(v) === String(value) ? " selected" : ""}>${esc(l)}</option>`).join("")}</select>`;
+  const check = (key, label) => `<label class="check"><input type="checkbox" data-o="${key}"${o[key] ? " checked" : ""}> ${esc(label)}</label>`;
+
+  function controls() {
+    const show = [["list", "my latest posts"], ["post", "one post"], ["photo", "one photo"]];
+    let h = `<label>show ${sel("show", show, o.show)}</label>`;
+    if (o.show === "list") {
+      h += `<label>how many ${sel("count", [5, 10, 20, 50].map(n => [n, `up to ${n}`]), o.count)}</label>`;
+      h += `<label>order ${sel("sort", sortChoices(fields), o.sort)}</label>`;
+      for (const f of tagFields) {
+        h += `<label>only ${esc(f.name)} <select data-filter="${esc(f.key)}"><option value="">any</option>${f.choices
+          .map(c => `<option${o.filters[f.key] === c ? " selected" : ""}>${esc(c)}</option>`)
+          .join("")}</select></label>`;
+      }
+      if (tagFields.length) {
+        h += `<label>filter buttons ${sel("menu", [["", "none"], ...tagFields.map(f => [f.key, `by ${f.name}`])], o.menu)}</label>`;
+        if (o.menu) {
+          const f = tagFields.find(x => x.key === o.menu);
+          h += `<label>button label <input data-o="menuLabel" value="${esc(o.menuLabel)}" placeholder="${esc(f?.name || "")}"></label>`;
+        }
+        h += `<label>headings ${sel("group", [["", "none"], ...tagFields.map(f => [f.key, `one per ${f.name}`])], o.group)}</label>`;
+      }
+    } else if (o.show === "post") {
+      h += published.length
+        ? `<label>post ${sel("post", published.map(p => [p.slug, p.title]), o.post)}</label>`
+        : `<p class="muted">publish a post first.</p>`;
+    } else {
+      h += photos.length
+        ? `<label>photo ${sel("photo", photos.map(f => [f.name, f.name]), o.photo)}</label>${check("caption", "show its caption")}`
+        : `<p class="muted">upload a photo first, on the files page.</p>`;
+    }
+    h += `<fieldset><legend>show with it</legend>`;
+    if (o.show !== "photo") h += check("titles", "titles and dates") + (fields.length ? check("fields", "tags and details") : "");
+    h += check("builtinStyle", "the built-in light styling") + `</fieldset>`;
+    if (look) h += check("useLook", "preview with my look from the style tab");
+    return h;
+  }
+
+  frame(
+    "embed",
+    `<p>choose what to show on your site, check it in the preview, then copy the code into your page where it should appear.</p>
+    <div class="playground embedder">
+      <form class="style-controls" id="eb" autocomplete="off"></form>
+      <div class="style-preview"><iframe id="stage" title="preview of the embed"></iframe></div>
+    </div>
+    <h2>your embed code</h2>
+    <p class="muted">paste it into your page's html where the posts should go. it updates by itself when you write or edit here.${look ? ` for your look, also copy the css from the <a href="#style">style</a> tab.` : ` to change how it looks, try the <a href="#style">style</a> tab.`}</p>
+    <textarea id="code" class="cssout" readonly style="min-height:90px"></textarea>
+    <div class="toolbar"><button class="primary" id="copycode">copy embed code</button></div>`
+  );
+  app.onclick = null;
+
+  const form = $("#eb");
+  const stage = $("#stage");
+  const code = () => {
+    const post = published.find(p => p.slug === o.post);
+    const photo = photos.find(f => f.name === o.photo);
+    return embedCode({ ...o, origin, cdnBase, user: username, postTitle: post?.title, photoUrl: photo?.url, photoAlt: photo?.alt });
+  };
+  let timer;
+  function update({ redraw = false } = {}) {
+    if (redraw) form.innerHTML = controls();
+    const c = code();
+    $("#code").value = c;
+    clearTimeout(timer);
+    timer = setTimeout(() => {
+      // With the style tab's look, also use its stand-in for the page around the posts.
+      const site = o.useLook ? saved : {};
+      const page = `body { margin: 0; padding: 20px; background: ${site.siteBg || "#ffffff"}; color: ${site.siteText || "#111111"}; font-family: ${siteFontStack(site.siteFont)}; }`;
+      stage.srcdoc = `<!doctype html><html><head><meta charset="utf-8"><style>${page}</style><style>${o.useLook ? look : ""}</style></head><body>${c.replace("</script>", "<\/script>")}</body></html>`;
+    }, 200);
+  }
+  form.addEventListener("input", ev => {
+    const t = ev.target;
+    if (t.dataset.filter !== undefined) o.filters[t.dataset.filter] = t.value;
+    else if (t.dataset.o) o[t.dataset.o] = t.type === "checkbox" ? t.checked : t.value;
+    else return;
+    // Changing what's shown changes which controls make sense.
+    update({ redraw: ["show", "menu"].includes(t.dataset.o) });
+  });
+  $("#copycode").onclick = () => copy($("#code").value, "embed code copied");
+  update({ redraw: true });
 }
 
 // ---- style playground ----
@@ -806,40 +891,8 @@ function settingsView() {
     <div id="fields"></div>
     <p class="muted" style="font-size:15px">renaming a tag doesn't rename it on posts that already have it.</p>
 
-    <h2>embedding</h2>
-    <p>every published post has an "embed code" button on the posts page. to show your latest posts in one go:</p>
-    <p><code>${esc(listSnippet(10))}</code> <button data-act="copylist">copy</button></p>
-    <details class="explain">
-      <summary>what do the parts of an embed code mean?</summary>
-      <dl>
-        <dt><code>&lt;script src="…/embed.js" … async&gt;&lt;/script&gt;</code></dt><dd>the whole thing is one tag you paste into your page, where the writing should appear. the bits in the middle tell it what to show.</dd>
-        <dt><code>data-user="${esc(username)}"</code></dt><dd>whose blog to show: yours. leave it as it is.</dd>
-        <dt><code>data-list="10"</code></dt><dd>show a list of your newest posts, up to that many. change the number to show more or fewer (50 at most).</dd>
-        <dt><code>data-post="my-post"</code></dt><dd>show just one post, by its address (the "address" box in the editor).</dd>
-        <dt><code>data-image="photo.jpg"</code></dt><dd>show one photo, with its description and caption.</dd>
-        <dt><code>data-menu="…"</code>, <code>data-filter="…"</code>, <code>data-sort="…"</code>, <code>data-group="…"</code></dt><dd>use your post fields: a row of filter buttons, only posts with one tag, a different order, or a heading per tag (examples below once you've set up fields).</dd>
-        <dt><code>data-style="none"</code>, <code>data-title="no"</code>, <code>data-fields="no"</code></dt><dd>turn off the built-in styling, the titles and dates, or the field values.</dd>
-        <dt><code>async</code></dt><dd>lets the rest of your page load without waiting for it. leave it in.</dd>
-      </dl>
-    </details>
-    ${fieldExamples()}
-    <p>photos have their own "embed code" button on the files page.</p>
-
-    <h2>styling</h2>
-    <p>embeds aren't boxed in: posts and photos go straight into your page, so they pick up your page's fonts, colors and sizes. to change how they look, add css to your own site using these classes:</p>
-    <textarea readonly style="width:100%;min-height:320px">/* a post (or each post in a list) */
-.kmp-post { }
-.kmp-title { }          /* the post's title */
-.kmp-date { }           /* the date under it */
-.kmp-body { }           /* the writing itself */
-.kmp-body img { }       /* photos inside posts */
-.kmp-body a { }
-
-/* a photo embed */
-.kmp-image { }          /* the whole thing (a &lt;figure&gt;) */
-.kmp-image img { }
-.kmp-image figcaption { }</textarea>
-    <p class="muted">the embed adds a few light defaults (photos fit the page, dates are a bit faded). your css always wins over them. to switch them off completely, add <code>data-style="none"</code> to the script tag. <code>data-title="no"</code> leaves post titles out and <code>data-caption="no"</code> leaves photo captions out.</p>
+    <h2>embedding and styling</h2>
+    <p>make the code for your site in the <a href="#embed">embed</a> tab: pick what to show, see it, copy it. try out looks for it in the <a href="#style">style</a> tab.</p>
     <p>feeds for readers: <a href="${esc(me.feeds.rss)}" target="_blank">rss</a> · <a href="${esc(me.feeds.json)}" target="_blank">json feed</a></p>
 
     <h2>let an AI agent set up your blog</h2>
@@ -859,10 +912,7 @@ function settingsView() {
       <p class="muted">this logs you out on your other devices.</p>
     </form>`
   );
-  app.onclick = ev => {
-    if (ev.target.dataset.act === "copylist") copy(listSnippet(10), "embed code copied");
-    if (ev.target.dataset.copycode) copy(ev.target.dataset.copycode, "embed code copied");
-  };
+  app.onclick = null;
   fieldsEditor();
   agentKeys();
   costs();

@@ -14,6 +14,10 @@ One Cloudflare Worker (`blog-cdn`) on the Reaction Future Institute account, plu
 
 - **Friends** log in at `/login` and use the dashboard at `/dashboard` (`public/app/app.js`):
   - **posts**: a markdown editor with a live preview, and save draft, publish or unpublish. Add photos with the "insert photo" button, by dragging them onto the editor, or by pasting.
+  - **embed**: an embed-code builder (`public/app/embedkit.js`).
+    - Pick latest posts, one post or one photo, then how many, the order, only one tag, filter buttons, headings per tag, and what to show with it.
+    - See it live with their real posts (in their style-tab look, if they made one), then copy the code.
+    - The embed buttons on the posts page open it with that post chosen.
   - **style**: a playground for how their posts could look on their own site.
     - Pick a starting look (clean, notebook, newspaper, typewriter, night) or set things one by one: font, sizes, title style, dates, links, tag pills, photo frames, spacing, cards, box colour.
     - It previews their real posts in a sandboxed page with a stand-in for their site's background, then gives CSS to copy (`public/app/stylekit.js`).
