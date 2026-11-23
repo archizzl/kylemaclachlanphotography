@@ -8,6 +8,7 @@ import { escapeHtml as e } from "./util.js";
 import { postLink } from "./feeds.js";
 import { excerpt } from "./markdown.js";
 import { parseJson, publicFields } from "./fields.js";
+import { scopedCss } from "../public/app/stylekit.js";
 
 export const HOME_PAGE_SIZE = 20;
 
@@ -27,7 +28,7 @@ export async function loadHome(env, { blog = "", page = 1, tag = "", slug = "" }
 
   // Tags match any tags field, ignoring case.
   const { results: posts } = await env.DB.prepare(
-    `SELECT p.*, u.username, u.display_name, u.post_url_pattern, u.fields_json AS user_fields FROM posts p JOIN users u ON u.id = p.user_id
+    `SELECT p.*, u.username, u.display_name, u.post_url_pattern, u.fields_json AS user_fields, u.look_json AS user_look FROM posts p JOIN users u ON u.id = p.user_id
      WHERE p.published = 1 AND u.disabled = 0 AND (?1 = '' OR u.username = ?1) AND (?4 = '' OR p.slug = ?4)
        AND (?5 = '' OR EXISTS (SELECT 1 FROM json_each(p.fields_json) f, json_each(f.value) t
                               WHERE f.type = 'array' AND lower(t.value) = lower(?5)))
@@ -58,7 +59,8 @@ export async function loadHome(env, { blog = "", page = 1, tag = "", slug = "" }
 
 const name = u => u.display_name || u.username;
 
-// A post's own fields (emotion, number, location…) as a small line under its title.
+// A post's own fields (emotion, number, location…) under its title, in the same markup as embeds,
+// so a blog's look styles them the same way here. Tags link to the blog's tag feed.
 function fieldLine(p) {
   const defs = parseJson(p.user_fields, []);
   const values = publicFields(defs, parseJson(p.fields_json, {}));
@@ -66,12 +68,22 @@ function fieldLine(p) {
     .filter(d => values[d.key] !== undefined)
     .map(d =>
       d.kind === "tags"
-        ? `<span class="field tags">${values[d.key]
-            .map(v => `<a class="tag" href="/${e(p.username)}?tag=${encodeURIComponent(v)}" title="${e(name(p))}'s posts tagged #${e(v)}">#${e(v)}</a>`)
+        ? `<span class="kmp-field kmp-field-${e(d.key)}" data-field="${e(d.key)}" data-kind="tags">${values[d.key]
+            .map(v => `<a class="kmp-tag" href="/${e(p.username)}?tag=${encodeURIComponent(v)}" title="${e(name(p))}'s posts tagged #${e(v)}">${e(v)}</a>`)
             .join(" ")}</span>`
-        : `<span class="field"><span class="fname">${e(d.name)}</span> ${e(values[d.key])}</span>`
+        : `<span class="kmp-field kmp-field-${e(d.key)}" data-field="${e(d.key)}" data-kind="${e(d.kind)}"><span class="kmp-field-name">${e(d.name)}</span> <span class="kmp-field-value">${e(values[d.key])}</span></span>`
     );
-  return parts.length ? `<p class="fields">${parts.join("")}</p>` : "";
+  return parts.length ? `<div class="kmp-fields">${parts.join("")}</div>` : "";
+}
+
+// Each blog's saved look from the style tab, limited to its own posts. Values were checked when
+// saved (and again by scopedCss), so they can't break out of the CSS.
+function looksCss(posts) {
+  const seen = new Map();
+  for (const p of posts) if (p.user_look && !seen.has(p.username)) seen.set(p.username, parseJson(p.user_look, {}));
+  if (!seen.size) return "";
+  const css = [...seen].map(([u, look]) => scopedCss(look, `.kmp-embed[data-blog="${u}"]`)).join("\n\n");
+  return `<style id="looks">\n${css}\n</style>`;
 }
 
 function longDate(d) {
@@ -108,13 +120,17 @@ export function homePage({ blogs, only, page, tag, slug, posts, more, photos }, 
     ? posts
         .map(p => {
           const elsewhere = p.post_url_pattern ? postLink(p, p, cdnBase) : "";
-          return `<article class="post">
-  <p class="byline">${only ? "" : `<a href="/${e(p.username)}">${e(name(p))}</a> · `}<time datetime="${e(p.date)}">${longDate(p.date)}</time></p>
-  <h2>${single ? e(p.title) : `<a href="/${e(p.username)}/${e(p.slug)}">${e(p.title)}</a>`}</h2>
+          const styled = Boolean(p.user_look);
+          return `<div class="kmp-embed${styled ? " styled" : ""}" data-blog="${e(p.username)}">
+<article class="kmp-post post">
+  ${only ? "" : `<p class="byline"><a href="/${e(p.username)}">${e(name(p))}</a></p>`}
+  <h2 class="kmp-title">${single ? e(p.title) : `<a href="/${e(p.username)}/${e(p.slug)}">${e(p.title)}</a>`}</h2>
+  <time class="kmp-date" datetime="${e(p.date)}">${longDate(p.date)}</time>
   ${fieldLine(p)}
-  <div class="body">${p.body_html}</div>
+  <div class="kmp-body">${p.body_html}</div>
   ${elsewhere ? `<p class="more"><a href="${e(elsewhere)}" rel="noopener">read it on ${e(name(p))}'s site →</a></p>` : ""}
-</article>`;
+</article>
+</div>`;
         })
         .join("\n")
     : `<p class="muted">no posts here yet.</p>`;
@@ -152,6 +168,7 @@ export function homePage({ blogs, only, page, tag, slug, posts, more, photos }, 
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&display=swap">
 <link rel="stylesheet" href="/app/home.css">
+${looksCss(posts)}
 <link rel="alternate" type="text/markdown" title="guide for AI agents setting up a blog here" href="/agents.md">
 </head>
 <body>

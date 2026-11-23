@@ -39,7 +39,10 @@
       ":where(.kmp-post) pre{overflow:auto}" +
       ":where(.kmp-post) .box{display:inline-block;border:1px solid currentColor;padding:0 .4em;border-radius:3px}" +
       ":where(.kmp-post) blockquote{margin-left:0;padding-left:1em;border-left:2px solid currentColor;opacity:.85}" +
-      ":where(.kmp-date){display:block;opacity:.6;font-size:.85em;margin:-.4em 0 1em}" +
+      // Headings come with a big top margin from the browser; posts are spaced by their own bottom margin.
+      ":where(.kmp-title){margin:0 0 .2em}" +
+      ":where(.kmp-group-title){margin-top:0}" +
+      ":where(.kmp-date){display:block;opacity:.6;font-size:.85em;margin:0 0 1em}" +
       ":where(.kmp-fields){display:flex;flex-wrap:wrap;gap:.3em 1em;font-size:.85em;margin:-.6em 0 1em}" +
       ":where(.kmp-field-name){opacity:.6;margin-right:.3em}" +
       // Tags look like archizzl.com's: muted #tags, no label, underlined on hover.

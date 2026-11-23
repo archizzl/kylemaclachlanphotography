@@ -229,3 +229,13 @@ textarea.cssout { width: 100%; min-height: 260px; font-size: 14px; }
 .style-preview .showwhat { border: 1px solid #ddd; border-radius: 3px; padding: 2px 12px 6px; margin: 0; display: flex; flex-wrap: wrap; gap: 2px 18px; }
 .style-preview .showwhat legend { color: #666; font-size: 15px; padding: 0 4px; }
 .style-preview .showwhat label.check { font-size: 16px; margin: 4px 0; }
+
+.top h1 a.out { font-style: normal; font-size: 0.6em; margin-left: 0.35em; text-decoration: none; vertical-align: 0.25em; }
+
+.style-controls .savebar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 0 0 10px; padding: 0 0 10px; border-bottom: 1px solid #ddd; }
+.style-controls .savebar #lookstatus { flex: 1; font-size: 15px; }
+
+td.actions details .hint { font-size: 13px; margin: 8px 0 2px; max-width: 360px; }
+
+/* the hidden attribute always wins over display rules above (e.g. on buttons) */
+[hidden] { display: none !important; }

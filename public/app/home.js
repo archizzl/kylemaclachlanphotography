@@ -7,7 +7,7 @@
 
   document.addEventListener("click", function (ev) {
     var row = ev.target.closest(".photos a");
-    var inPost = ev.target.closest(".post .body img");
+    var inPost = ev.target.closest(".kmp-body img");
     if (!row && !inPost) return;
     ev.preventDefault();
     var src = row ? row.href : inPost.src;

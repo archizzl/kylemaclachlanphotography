@@ -98,7 +98,9 @@ function showSnippet(title, choices, extra = "") {
 function frame(active, inner) {
   const tab = (id, label) => `<a href="#${id}" class="${active === id ? "on" : ""}">${label}</a>`;
   document.querySelectorAll("dialog").forEach(d => d.remove());
-  app.innerHTML = `<header class="top"><h1>${esc(me?.display_name || username)}</h1>
+  // ↗ goes to the friend's own site if they've set one, otherwise their page here.
+  const outside = me?.site_url || `/${username}`;
+  app.innerHTML = `<header class="top"><h1>${esc(me?.display_name || username)}<a class="out" href="${esc(outside)}" target="_blank" rel="noopener" title="${me?.site_url ? "your site" : "your blog on kylemaclachlanphotography.org"}">↗</a></h1>
     <nav>${tab("posts", "posts")}${tab("files", "files")}${tab("embed", "embed")}${tab("style", "style")}${tab("settings", "settings")}<a href="/logout">log out</a></nav></header>
     <main>${inner}</main>`;
 }
@@ -672,21 +674,24 @@ async function embedView(kind, which) {
 }
 
 // ---- style playground ----
-// Try out looks on your own posts, then copy the CSS into your site. Your look is saved on KMP so
-// other blogs can start from it, but it never changes anyone's site: only the copied CSS does.
+// Try out looks on your own posts, then copy the CSS into your site. Edits are a draft (kept in this
+// browser) until "save look": the saved look is what your page here and the front page show your
+// posts in, and what other blogs can start from. Your own site only changes when you paste the CSS.
 
 // Your saved look, or the archizzl default if you haven't made one.
 const myLook = () => (me.look && Object.keys(me.look).length ? { ...me.look } : { ...DEFAULT_LOOK });
-
-let lookTimer;
-function saveLook(look) {
-  me.look = look;
-  clearTimeout(lookTimer);
-  lookTimer = setTimeout(() => api("look", { method: "PUT", body: { look } }).catch(err => toast(err.message, true)), 600);
+const DRAFT_KEY = `kmp-look-draft-${username}`;
+function loadDraft() {
+  try { return JSON.parse(localStorage.getItem(DRAFT_KEY)); } catch { return null; }
 }
+function setDraft(look) {
+  try { look ? localStorage.setItem(DRAFT_KEY, JSON.stringify(look)) : localStorage.removeItem(DRAFT_KEY); } catch {}
+}
+const sameLook = (a, b) => JSON.stringify(Object.entries(a).filter(([, v]) => v).sort()) === JSON.stringify(Object.entries(b).filter(([, v]) => v).sort());
 
 async function styleView() {
-  let s = myLook();
+  const draft = loadDraft();
+  let s = draft || myLook();
   const [{ posts }, { files }, { looks }] = await Promise.all([api("posts"), api("files"), api("looks")]);
   const published = posts.filter(p => p.published);
   const photo = files.find(f => f.content_type.startsWith("image/"));
@@ -719,6 +724,9 @@ async function styleView() {
     `<p>try out how your posts could look on your own site. the preview uses your real posts. when you like it, copy the css at the bottom into your site.</p>
     <div class="playground">
       <form class="style-controls" id="controls" autocomplete="off">
+        <div class="savebar"><span id="lookstatus"></span>
+          <button type="button" class="primary" id="savelook">save look</button>
+          <button type="button" id="discard">discard changes</button></div>
         <label>start from <select id="preset">
           <option value="">choose…</option>
           <option value="default">the default (archizzl style)</option>
@@ -745,7 +753,8 @@ async function styleView() {
     <h2>your css</h2>
     <p class="muted">paste this into your site's stylesheet, or inside <code>&lt;style&gt;…&lt;/style&gt;</code> in your page's <code>&lt;head&gt;</code>. it works with every embed code from this dashboard, and your site's own styles fill in anything you didn't set.${s.font === "atkinson" || s.font === "archizzl" ? ` Atkinson Hyperlegible is a web font: if your site doesn't have Calibri or Atkinson, also add <code>&lt;link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible&amp;display=swap"&gt;</code>.` : ""}</p>
     <textarea id="css" class="cssout" readonly></textarea>
-    <div class="toolbar"><button class="primary" id="copycss">copy css</button><button id="resetstyle">back to the default</button></div>`
+    <div class="toolbar"><button class="primary" id="copycss">copy css</button><button id="resetstyle">back to the default</button></div>
+    <p class="muted" style="font-size:15px">saved looks also style your posts on <a href="/${esc(username)}" target="_blank">your page here</a> and on the front page.</p>`
   );
   app.onclick = null;
 
@@ -793,17 +802,18 @@ async function styleView() {
       s[t.dataset.key] = t.value;
     } else return;
     apply();
-    saveLook(s);
+    setDraft(s);
+    status();
   });
   $("#preset").onchange = ev => {
     const v = ev.target.value;
     const from = v === "default" ? DEFAULT_LOOK : looks[Number(v)]?.look;
     if (!from) return;
-    if (!confirm(`Start from ${v === "default" ? "the default look" : `${looks[Number(v)].name}'s look`}? This replaces your current settings.`)) {
+    if (dirty() && !confirm(`Start from ${v === "default" ? "the default look" : `${looks[Number(v)].name}'s look`}? Your unsaved changes will be replaced.`)) {
       ev.target.value = "";
       return;
     }
-    saveLook({ ...from });
+    setDraft({ ...s, ...Object.fromEntries(Object.keys(s).map(k => [k, ""])), ...from }); // a draft until saved
     styleView();
   };
   $(".showwhat").addEventListener("change", ev => {
@@ -815,10 +825,33 @@ async function styleView() {
   });
   $("#copycss").onclick = () => copy(cssBox.value, "css copied");
   $("#resetstyle").onclick = () => {
-    if (!confirm("Go back to the default look? This replaces your current settings.")) return;
-    saveLook({ ...DEFAULT_LOOK });
+    setDraft({ ...DEFAULT_LOOK });
     styleView();
   };
+
+  // Saved or not: the status line, and which buttons make sense.
+  const dirty = () => !sameLook(s, myLook());
+  function status() {
+    const d = dirty();
+    $("#lookstatus").textContent = d ? "unsaved changes" : me.look ? "saved" : "the default (not saved yet)";
+    $("#lookstatus").className = d ? "problem" : "muted";
+    $("#discard").hidden = !d;
+    $("#savelook").disabled = !d && Boolean(me.look);
+  }
+  $("#savelook").onclick = async () => {
+    try {
+      me.look = (await api("look", { method: "PUT", body: { look: s } })).look;
+      setDraft(null);
+      status();
+      toast("look saved. your page here and the front page show it within a minute.");
+    } catch (err) { toast(err.message, true); }
+  };
+  $("#discard").onclick = () => {
+    if (!confirm("Discard your unsaved changes?")) return;
+    setDraft(null);
+    styleView();
+  };
+  status();
 }
 
 // ---- agent keys ----

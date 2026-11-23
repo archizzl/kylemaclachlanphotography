@@ -182,7 +182,7 @@ async function login(request, env) {
       401
     );
   }
-  if (user.disabled) return html(loginPage({ message: "This account is switched off. Ask Archie.", username }), 403);
+  if (user.disabled) return html(loginPage({ message: "This account is disabled. Ask Archie.", username }), 403);
   await clearFails(env, request);
   if (user.failed_logins) await env.DB.prepare("UPDATE users SET failed_logins = 0 WHERE id = ?").bind(user.id).run();
   return redirect("/dashboard", await startSession(env, request, user.id));
@@ -264,7 +264,7 @@ async function admin(path, method, request, env) {
     if (disabled) await endAllSessions(env, user.id);
     return adminView(env, {
       text: disabled
-        ? `${user.username} is switched off. they can't log in, and their posts and feeds are hidden. their files stay on the CDN.`
+        ? `${user.username} is disabled. they can't log in, and their posts and feeds are hidden. their files stay on the CDN.`
         : `${user.username} is back on.`,
     });
   }
@@ -315,7 +315,19 @@ async function accountUsage(env) {
     start: firsts.length ? Math.min(...firsts) : now,
     now,
   });
-  return { months: report.months.map(m => ({ month: m.month, partial: m.partial, source: m.source, ...m.account })), sync: await syncStatus(env.DB) };
+  // What each bucket holds, from the latest full day Cloudflare measured (today's is still filling in).
+  const { results: buckets } = await env.DB.prepare(
+    `SELECT bucket, stored_bytes, date FROM r2_usage_daily r
+     WHERE bucket != '' AND date = (SELECT MAX(date) FROM r2_usage_daily x WHERE x.bucket = r.bucket AND x.date < ?)
+     ORDER BY stored_bytes DESC`
+  )
+    .bind(new Date(now).toISOString().slice(0, 10))
+    .all();
+  return {
+    months: report.months.map(m => ({ month: m.month, partial: m.partial, source: m.source, ...m.account })),
+    sync: await syncStatus(env.DB),
+    buckets: buckets.map(b => ({ ...b, thisSite: b.bucket === env.BLOG_BUCKET })),
+  };
 }
 
 // ---- dashboard API ----

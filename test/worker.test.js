@@ -320,7 +320,7 @@ test("post fields: set up, auto-numbered, filtered, sorted and shown in feeds", 
   // Removing a field hides its values everywhere.
   await june("/api/fields", { method: "PUT", body: { fields: defs.filter(f => f.key !== "written_at") } });
   assert.deepEqual((await (await june("/june/first.json?y")).json()).post.fields, { emotion: ["tender"], no: 1 });
-  assert.match(await (await june("/?fields")).text(), /<a class="tag" href="\/june\?tag=restless"[^>]*>#restless<\/a>/);
+  assert.match(await (await june("/?fields")).text(), /<a class="kmp-tag" href="\/june\?tag=restless"[^>]*>restless<\/a>/);
 });
 
 test("agent keys work like the person, can be revoked, and can't manage keys or passwords", async () => {
@@ -548,7 +548,7 @@ test("blog pages: /<blog>, #tag feeds, single posts, and tidy 404s", async () =>
   const feed = await (await reader("/tagger?a")).text();
   assert.match(feed, /<title>Tag Blog! · kyle maclachlan photography<\/title>/);
   assert.match(feed, /<a href="\/tagger\/in-nyc">In NYC<\/a>/);
-  assert.match(feed, /<a class="tag" href="\/tagger\?tag=NYC"[^>]*>#NYC<\/a>/);
+  assert.match(feed, /<a class="kmp-tag" href="\/tagger\?tag=NYC"[^>]*>NYC<\/a>/);
   assert.ok(!feed.includes("Secret"));
 
   // A tag feed: case doesn't matter, only tags fields count (not the "place" text field), drafts stay out.
@@ -602,4 +602,29 @@ test("the agent guide is findable by agents but not shown to people", async () =
   assert.match(page, /<link rel="alternate" type="text\/markdown"[^>]*href="\/agents\.md">/);
   assert.match(page, /<!-- AI agents: [^>]*agents\.md/);
   assert.match(res.headers.get("link"), /<\/agents\.md>; rel="alternate"/);
+});
+
+
+test("KMP's own pages show each post in its blog's saved look; blogs without one stay plain", async () => {
+  await archie("/admin/users", { method: "POST", form: { username: "styled", display_name: "Styled", password: "styled-password-1" } });
+  await archie("/admin/users", { method: "POST", form: { username: "plain", password: "plain-password-1" } });
+  const st = browser("21.0.0.1");
+  await st("/login", { method: "POST", form: { username: "styled", password: "styled-password-1" } });
+  await st("/api/posts", { method: "POST", body: { title: "Styled Post", date: "2031-01-02", published: 1 } });
+  await st("/api/look", { method: "PUT", body: { look: { font: "comic", titleColor: "#ff7eb6", siteBg: "#fffbea" } } });
+  const pl = browser("21.0.0.2");
+  await pl("/login", { method: "POST", form: { username: "plain", password: "plain-password-1" } });
+  await pl("/api/posts", { method: "POST", body: { title: "Plain Post", date: "2031-01-01", published: 1 } });
+
+  const reader = browser("21.0.0.3");
+  for (const path of ["/?mix", "/styled?mix", "/styled/styled-post?mix"]) {
+    const page = await (await reader(path)).text();
+    assert.match(page, /<style id="looks">[\s\S]*\.kmp-embed\[data-blog="styled"\] \{\n  background: #fffbea;/, path);
+    assert.match(page, /\.kmp-embed\[data-blog="styled"\] \.kmp-title \{\n  color: #ff7eb6;/, path);
+    assert.match(page, /<div class="kmp-embed styled" data-blog="styled">/, path);
+  }
+  const mixed = await (await reader("/?mix2")).text();
+  assert.match(mixed, /<div class="kmp-embed" data-blog="plain">/); // no saved look: plain, no card
+  assert.ok(!/data-blog="plain"\] \{/.test(mixed));
+  assert.equal((await (await reader("/plain?x")).text()).includes('<style id="looks">'), false);
 });

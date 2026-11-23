@@ -30,25 +30,29 @@ h1 a, h1 a:visited { color: #000; text-decoration: none; }
 
 /* feed */
 .feed { padding: 18px 0 40px; min-width: 0; }
-.post { border-bottom: 1px solid #000; padding: 0 0 26px; margin: 0 0 26px; overflow-wrap: break-word; }
-.post h2 { margin: 2px 0 10px; }
-.byline { margin: 0; font-size: 15px; color: #888; }
-.byline a, .byline a:visited { color: #888; }
-.post .body img { max-width: 100%; height: auto; display: block; margin: 8px 0; cursor: zoom-in; }
-.post .body blockquote { margin-left: 0; padding-left: 14px; border-left: 1px solid #000; }
-.post .body pre { overflow: auto; }
-.post .body .box, .preview .box { display: inline-block; border: 1px solid currentColor; padding: 1px 8px; margin: 0 1px; border-radius: 3px; }
-.more { font-size: 16px; }
-.fields { display: flex; flex-wrap: wrap; gap: 2px 16px; margin: -4px 0 12px; font-size: 15px; color: #666; }
-.fields .fname { color: #888; }
-/* tags like archizzl.com: muted #tags, underlined on hover */
-.fields .tag, .filter .tag, .fields .tag:visited { color: #888; text-decoration: none; margin-right: 6px; }
-.fields .tag:hover, .filter .tag:hover { text-decoration: underline; opacity: 1; }
-.post h2 a, .post h2 a:visited { color: inherit; text-decoration: none; }
-.post h2 a:hover { text-decoration: underline; opacity: 0.6; }
-.filter { font-size: 16px; color: #666; margin: 0 0 18px; }
-.filter .tag { color: #000; font-weight: bold; }
-.filter .clear, .filter .clear:visited { color: #888; }
+/* Posts use the same classes as embeds, so each blog's saved look (a <style id="looks"> scoped to
+   .kmp-embed[data-blog=…]) styles them here too. These are the plain defaults underneath. */
+.kmp-embed { margin: 0 0 26px; overflow-wrap: break-word; }
+.kmp-embed:not(.styled) { border-bottom: 1px solid #000; padding: 0 0 26px; }
+.kmp-embed.styled { padding: 22px 26px; border-radius: 4px; box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.12); }
+.kmp-post { margin: 0; }
+.byline { margin: 0 0 2px; font-size: 15px; }
+.byline a, .byline a:visited { color: inherit; opacity: 0.55; }
+.kmp-title { margin: 0 0 4px; }
+.kmp-title a, .kmp-title a:visited { color: inherit; text-decoration: none; }
+.kmp-title a:hover { text-decoration: underline; opacity: 0.6; }
+.kmp-date { display: block; font-size: 15px; opacity: 0.55; margin: 0 0 10px; }
+.kmp-fields { display: flex; flex-wrap: wrap; gap: 2px 16px; margin: -4px 0 12px; font-size: 15px; }
+.kmp-field-name { opacity: 0.6; }
+.kmp-field[data-kind="tags"] .kmp-field-name { display: none; }
+.kmp-tag, .kmp-tag:visited { color: inherit; opacity: 0.55; text-decoration: none; margin-right: 6px; }
+.kmp-tag::before { content: "#"; }
+.kmp-tag:hover { text-decoration: underline; opacity: 1; }
+.kmp-body img { max-width: 100%; height: auto; display: block; margin: 8px 0; cursor: zoom-in; }
+.kmp-body blockquote { margin-left: 0; padding-left: 14px; border-left: 1px solid currentColor; }
+.kmp-body pre { overflow: auto; }
+.kmp-body .box, .preview .box { display: inline-block; border: 1px solid currentColor; padding: 1px 8px; margin: 0 1px; border-radius: 3px; }
+.more { font-size: 16px; margin-bottom: 0; }
 .pager { display: flex; justify-content: space-between; }
 
 /* photo row: pinned along the bottom of the window (on phones it sits at the end of the page) */

@@ -206,3 +206,19 @@ export function cssFrom(s) {
 }
 
 export const siteFontStack = key => FONT_STACKS[key] || FONT_STACKS.archizzl;
+
+// A blog's look, limited to its own posts on KMP's pages (the front page, /<blog>, single posts),
+// where each post sits in <div class="kmp-embed" data-blog="…">. The "your site" stand-ins become
+// that box's background, text colour and font.
+export function scopedCss(look, scope) {
+  const l = cleanLook(look);
+  const site = `${scope} {\n  background: ${l.siteBg || "#ffffff"};\n  color: ${l.siteText || "#000000"};\n  font-family: ${siteFontStack(l.siteFont)};\n}`;
+  const rules = cssFrom(l).replace(/^([^\s{}][^{}]*?) \{$/gm, (m, sels) =>
+    sels
+      .split(",")
+      .map(x => x.trim())
+      .map(x => (x.startsWith(".kmp-embed") ? scope + x.slice(".kmp-embed".length) : `${scope} ${x}`))
+      .join(", ") + " {"
+  );
+  return rules ? `${site}\n\n${rules}` : site;
+}
