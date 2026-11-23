@@ -26,8 +26,6 @@ h1 a, h1 a:visited { color: #000; text-decoration: none; }
 .blogs ul { list-style: none; padding: 0; margin: 0; }
 .blogs li { margin: 4px 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .blogs a.on, .blogs a.on:visited { color: #000; font-weight: bold; text-decoration: none; }
-.blogs .agents { font-size: 14px; margin: 24px 0 0; }
-.blogs .agents a, .blogs .agents a:visited { color: #888; }
 .blogs a.site { font-size: 15px; text-decoration: none; margin-left: 2px; }
 
 /* feed */
@@ -77,7 +75,6 @@ body { padding-bottom: var(--strip); }
   .blogs { position: static; max-height: none; padding: 12px 0 0; border-bottom: 1px solid #ddd; }
   .blogs ul { display: flex; flex-wrap: wrap; gap: 4px 14px; padding-bottom: 12px; }
   .blogs li { margin: 0; overflow: visible; }
-  .blogs .agents { margin: 0 0 10px; }
   body { padding-bottom: 0; }
   .photos { position: static; height: auto; padding: 12px 16px 20px; }
   .photos img { height: 110px; }

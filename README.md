@@ -51,7 +51,7 @@ One Cloudflare Worker (`blog-cdn`) on the Reaction Future Institute account, plu
   - An AI agent uses it as `Authorization: Bearer kmp_…` on `/api/*`, without the friend's password.
   - Keys can't change the password or manage keys.
   - An admin password reset revokes them.
-  - The guide agents follow is `public/agents.md` (served at `/agents.md`, with `/llms.txt` pointing to it, and linked from the front page). **Update it whenever the API or embed options change.**
+  - The guide agents follow is `public/agents.md` (served at `/agents.md`, with `/llms.txt` pointing to it; the front page points agents to it with a `<link rel="alternate">`, an HTML comment and a `Link:` header, but shows people no link). **Update it whenever the API or embed options change.**
 - **Archie's dashboard** is at `/admin`, using the `ADMIN_PASSWORD` Worker secret.
   - **Totals at the top**: blogs, the whole app's cost all time and this month, and locked accounts.
   - **Billing, whole app**: every blog's R2 share and domains added together by month, with a running total.

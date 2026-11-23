@@ -146,7 +146,12 @@ async function frontPage(env, url, { blog = "", slug = "" }) {
   if (slug && !data.posts.length) {
     return html(simplePage("not found", `that post isn't here. <a href="/${blog}">see the rest of the blog</a>.`), 404);
   }
-  return html(homePage(data, { cdnBase: cdnBase(env) }), 200, { "cache-control": `public, max-age=${PUBLIC_CACHE_SECONDS}`, "x-frame-options": "DENY" });
+  return html(homePage(data, { cdnBase: cdnBase(env) }), 200, {
+    "cache-control": `public, max-age=${PUBLIC_CACHE_SECONDS}`,
+    "x-frame-options": "DENY",
+    // For agents: where the setup guide is (people never see this).
+    link: '</agents.md>; rel="alternate"; type="text/markdown"; title="guide for AI agents"',
+  });
 }
 
 // ---- friend login ----

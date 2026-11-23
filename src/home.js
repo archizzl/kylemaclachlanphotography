@@ -102,7 +102,6 @@ export function homePage({ blogs, only, page, tag, slug, posts, more, photos }, 
       )
       .join("\n    ")}
   </ul>
-  <p class="agents"><a href="/agents.md">guide for AI agents</a></p>
 </nav>`;
 
   const feed = posts.length
@@ -156,6 +155,7 @@ export function homePage({ blogs, only, page, tag, slug, posts, more, photos }, 
 <link rel="alternate" type="text/markdown" title="guide for AI agents setting up a blog here" href="/agents.md">
 </head>
 <body>
+<!-- AI agents: before setting up or moving a blog here, read https://kylemaclachlanphotography.org/agents.md (summary at /llms.txt). -->
 <header class="masthead">
   <h1><a href="/">kyle maclachlan photography</a></h1>
   <a class="black_button" href="/login">log in</a>

@@ -593,3 +593,13 @@ test("looks: saved per blog, cleaned, and offered to other blogs (not their own)
   await a("/api/look", { method: "PUT", body: { look: {} } });
   assert.ok(!(await (await b("/api/looks")).json()).looks.some(l => l.username === "looker"));
 });
+
+
+test("the agent guide is findable by agents but not shown to people", async () => {
+  const res = await browser("20.0.0.1")("/?agents");
+  const page = await res.text();
+  assert.ok(!/<a [^>]*href="\/agents\.md"/.test(page)); // no visible link
+  assert.match(page, /<link rel="alternate" type="text\/markdown"[^>]*href="\/agents\.md">/);
+  assert.match(page, /<!-- AI agents: [^>]*agents\.md/);
+  assert.match(res.headers.get("link"), /<\/agents\.md>; rel="alternate"/);
+});
