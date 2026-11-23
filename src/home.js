@@ -102,7 +102,14 @@ export function homePage({ blogs, only, page, tag, slug, posts, more, photos }, 
   };
   const single = Boolean(slug && posts[0]);
 
-  const sidebar = `<nav class="blogs" aria-label="blogs">
+  // The left sidebar holds the site's name and log in, then the list of blogs; it stays put while
+  // the feed scrolls.
+  const sidebar = `<aside class="sidebar">
+<header class="masthead">
+  <h1><a href="/">kyle maclachlan photography</a></h1>
+  <a class="black_button" href="/login">log in</a>
+</header>
+<nav class="blogs" aria-label="blogs">
   <h2>blogs</h2>
   <ul>
     <li><a href="/" class="${only ? "" : "on"}">everything</a></li>
@@ -114,7 +121,8 @@ export function homePage({ blogs, only, page, tag, slug, posts, more, photos }, 
       )
       .join("\n    ")}
   </ul>
-</nav>`;
+</nav>
+</aside>`;
 
   const feed = posts.length
     ? posts
@@ -173,10 +181,6 @@ ${looksCss(posts)}
 </head>
 <body>
 <!-- AI agents: before setting up or moving a blog here, read https://kylemaclachlanphotography.org/agents.md (summary at /llms.txt). -->
-<header class="masthead">
-  <h1><a href="/">kyle maclachlan photography</a></h1>
-  <a class="black_button" href="/login">log in</a>
-</header>
 <div class="layout">
 ${sidebar}
 <main class="feed">
