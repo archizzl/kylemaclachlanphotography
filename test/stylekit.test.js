@@ -36,3 +36,9 @@ test("every preset and every option produces valid-looking css", () => {
     for (const v of values) assert.ok(!/undefined|NaN/.test(cssFrom({ [c.key]: v })), `${c.key}=${v}`);
   }
 });
+
+test("tags default to archizzl-style #tags; pill styles switch that off", () => {
+  assert.equal(cssFrom({ tags: "" }), "");
+  assert.match(cssFrom({ tags: "filled" }), /\.kmp-tag::before, \.kmp-menu button::before \{\n  content: none;/);
+  assert.match(cssFrom({ tagColor: "#ff0000" }), /\.kmp-tag, \.kmp-menu button \{\n  color: #ff0000;\n  opacity: 1;/);
+});

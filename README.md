@@ -7,7 +7,10 @@ Blog hosting for friends at https://kylemaclachlanphotography.org. Archie makes 
 One Cloudflare Worker (`blog-cdn`) on the Reaction Future Institute account, plus a D1 database and an R2 bucket.
 
 - **The front page** (`/`, `src/home.js`) is public. No login needed.
-  - A left sidebar lists every blog. Each name filters the page to that blog (`/?blog=<user>`), and ↗ goes to the friend's own site.
+  - A left sidebar lists every blog. Each name goes to that blog's own feed, `/<username>`, and ↗ goes to the friend's own site.
+    - `/<blog name>` also works (e.g. `/archizzl`) and redirects to the username address. Old `/?blog=` links redirect too.
+    - Post titles go to `/<username>/<slug>`, a page for that one post.
+    - `#tags` go to `/<username>?tag=<tag>`, that blog's posts with the tag. It matches any tags field, ignoring case, and shows "showing #tag (clear)".
   - The middle is one feed of every published post from every blog, newest first, 20 per page.
   - Along the bottom is a row of every uploaded photo. It's pinned to the window on desktop and sits at the end of the page on phones. Clicking a photo opens it bigger.
   - It's cached for 60 seconds.

@@ -110,6 +110,8 @@
   [data-value="hopeful"]  { --feel: #c4f0b4; }
   [data-value="giddy"]    { --feel: #fff08a; }
   .kmp-tag[data-value] { background: var(--feel, #fff); }
+  .kmp-tag, .kmp-menu button { opacity: 1; display: inline-block; }
+  .kmp-tag::before, .kmp-menu button::before { content: none; } /* pills, not the default #tags */
 
   /* the feeling filter: a label, then one pill per feeling; the chosen one is filled in dark */
   .kmp-menu { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 8px; margin: 0 0 44px; }

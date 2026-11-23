@@ -20,7 +20,7 @@
  * own CSS applies. The default styles below have zero specificity (:where) and go first in <head>,
  * so any rule the page writes wins. Hooks for styling:
  *   .kmp-post[data-emotion~="tender"]   every post carries its tag values as data attributes
- *   .kmp-fields .kmp-field .kmp-field-name .kmp-tag[data-value="tender"]
+ *   .kmp-fields .kmp-field[data-kind] .kmp-field-name .kmp-tag[data-value="tender"]  (tags show as #tag by default)
  *   .kmp-menu .kmp-menu-label .kmp-menu button[aria-pressed="true"]   .kmp-group[data-value]   .kmp-group-title
  *
  * The HTML comes from the server, which escapes anything typed as HTML, so it's safe to insert.
@@ -41,12 +41,18 @@
       ":where(.kmp-date){display:block;opacity:.6;font-size:.85em;margin:-.4em 0 1em}" +
       ":where(.kmp-fields){display:flex;flex-wrap:wrap;gap:.3em 1em;font-size:.85em;margin:-.6em 0 1em}" +
       ":where(.kmp-field-name){opacity:.6;margin-right:.3em}" +
-      ":where(.kmp-tag){display:inline-block;border:1px solid currentColor;border-radius:99px;padding:0 .55em;margin:0 .25em .2em 0;line-height:1.5}" +
+      // Tags look like archizzl.com's: muted #tags, no label, underlined on hover.
+      ":where(.kmp-field[data-kind=tags] .kmp-field-name){display:none}" +
+      ":where(.kmp-tag){opacity:.55;margin-right:.5em}" +
+      ":where(.kmp-tag)::before{content:'#'}" +
+      ":where(button.kmp-tag:hover){text-decoration:underline;opacity:1}" +
       ":where(.kmp-menu){display:flex;flex-wrap:wrap;align-items:center;gap:.4em;margin:0 0 1.5em}" +
       ":where(.kmp-menu-label){opacity:.7;margin-right:.3em}" +
       ":where(button.kmp-tag){font:inherit;font-size:inherit;color:inherit;background:none;cursor:pointer}" +
-      ":where(.kmp-menu button){font:inherit;color:inherit;background:none;border:1px solid currentColor;border-radius:99px;padding:.1em .8em;cursor:pointer}" +
-      ":where(.kmp-menu button[aria-pressed=true]){outline:2px solid currentColor;outline-offset:1px;font-weight:bold}" +
+      ":where(.kmp-menu button){font:inherit;color:inherit;background:none;border:0;padding:0 .2em;cursor:pointer;opacity:.55}" +
+      ":where(.kmp-menu button:hover){text-decoration:underline;opacity:1}" +
+      ":where(.kmp-menu button:not([data-value='']))::before{content:'#'}" +
+      ":where(.kmp-menu button[aria-pressed=true]){opacity:1;font-weight:bold;text-decoration:underline}" +
       ":where(.kmp-group-title){margin:1.5em 0 .8em}" +
       ":where(.kmp-image){margin:1em 0}" +
       ":where(.kmp-image) img{display:block}" +
@@ -85,6 +91,7 @@
       if (!vals.length) return;
       var f = el("span", "kmp-field kmp-field-" + d.key);
       f.setAttribute("data-field", d.key);
+      f.setAttribute("data-kind", d.kind);
       f.appendChild(el("span", "kmp-field-name", d.name));
       vals.forEach(function (v) {
         if (d.kind === "tags") {

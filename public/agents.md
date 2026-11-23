@@ -206,9 +206,11 @@ The built-in defaults use `:where()`, so they have no specificity, and they load
 .kmp-title {} .kmp-title a {}          /* h2 (h3 inside groups); linked when post_url_pattern is set */
 .kmp-date {}                           /* <time> */
 .kmp-fields {}                         /* the row of field values */
-.kmp-field {} .kmp-field-emotion {}    /* one field; also data-field="emotion" */
+.kmp-field {} .kmp-field-emotion {}    /* one field; also data-field="emotion" and data-kind="tags|number|text" */
 .kmp-field-name {} .kmp-field-value {} /* its label, and a number/text value */
-.kmp-tag {} .kmp-tag[data-value="tender"] {}   /* one tag (values are lowercased, spaces → -) */
+.kmp-tag {} .kmp-tag[data-value="tender"] {}   /* one tag (values are lowercased, spaces → -). By default tags look like
+                                                  archizzl.com's: muted "#tag" (from ::before), no field label. For pills,
+                                                  set .kmp-tag::before { content: none } and style .kmp-tag. */
 .kmp-body {} .kmp-body img {}          /* the post's text */
 .kmp-menu {} .kmp-menu-label {} .kmp-menu button[aria-pressed="true"] {}   /* filter row; selected button */
 button.kmp-tag {}                      /* a post's tags, when they filter the menu */
@@ -226,7 +228,7 @@ Write CSS for these classes that copies their current design: fonts, colors, tit
 - `GET /<user>/<slug>.json` returns one post.
 - `GET /<user>/images/<file name>.json` returns one photo.
 - `GET /<user>/feed.xml` (RSS) and `/<user>/feed.json` (JSON Feed) are the feeds. Tags become categories.
-- `https://kylemaclachlanphotography.org/?blog=<user>` is their blog on the shared front page.
+- `https://kylemaclachlanphotography.org/<user>` is their blog on the shared front page, `/<user>?tag=<tag>` is one tag, and `/<user>/<slug>` is one post.
 
 Only published posts appear in these. Public answers are cached for about a minute, so add any query string (`?v=2`) to see a change immediately.
 

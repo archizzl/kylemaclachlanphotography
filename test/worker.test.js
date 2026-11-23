@@ -269,8 +269,11 @@ test("the front page shows every blog's published posts, newest first, and their
   assert.ok(page.indexOf("Sam &lt;Newest&gt;") < page.indexOf("Old Maya")); // newest first, across blogs
   assert.match(page, /<section class="photos"[\s\S]*maya\/dog\.png[\s\S]*alt="my dog asleep"/);
 
-  // ?blog= narrows everything to one blog.
-  const only = await (await reader("/?blog=sam")).text();
+  // /<blog> narrows everything to one blog (old /?blog= links redirect there).
+  const old = await reader("/?blog=sam");
+  assert.equal(old.status, 301);
+  assert.equal(old.headers.get("location"), `${ORIGIN}/sam`);
+  const only = await (await reader("/sam")).text();
   assert.ok(only.includes("Sam &lt;Newest&gt;"));
   assert.ok(!only.includes("Old Maya"));
   assert.ok(!only.includes("maya/dog.png"));
@@ -317,7 +320,7 @@ test("post fields: set up, auto-numbered, filtered, sorted and shown in feeds", 
   // Removing a field hides its values everywhere.
   await june("/api/fields", { method: "PUT", body: { fields: defs.filter(f => f.key !== "written_at") } });
   assert.deepEqual((await (await june("/june/first.json?y")).json()).post.fields, { emotion: ["tender"], no: 1 });
-  assert.ok((await (await june("/?fields")).text()).includes('<span class="tag">restless</span>'));
+  assert.match(await (await june("/?fields")).text(), /<a class="tag" href="\/june\?tag=restless"[^>]*>#restless<\/a>/);
 });
 
 test("agent keys work like the person, can be revoked, and can't manage keys or passwords", async () => {
@@ -528,4 +531,43 @@ test("open tags grow as posts are written, and the brief list has every post wit
   assert.equal(page2.posts.length, 10);
   const tagged = await (await a("/archietest/posts.json?brief=1&limit=1000&filter=tags:nyc&filter=tags:bluegrass&t")).json();
   assert.equal(tagged.posts.length, 30);
+});
+
+
+test("blog pages: /<blog>, #tag feeds, single posts, and tidy 404s", async () => {
+  await archie("/admin/users", { method: "POST", form: { username: "tagger", display_name: "Tag Blog!", password: "tagger-password-1" } });
+  const t = browser("18.0.0.1");
+  await t("/login", { method: "POST", form: { username: "tagger", password: "tagger-password-1" } });
+  await t("/api/fields", { method: "PUT", body: { fields: [{ name: "tags", kind: "tags", open: true, choices: [] }, { name: "place", kind: "text" }] } });
+  await t("/api/posts", { method: "POST", body: { title: "In NYC", date: "2026-02-02", published: 1, fields: { tags: ["NYC", "bluegrass"], place: "nyc" } } });
+  await t("/api/posts", { method: "POST", body: { title: "At Work", date: "2026-02-01", published: 1, fields: { tags: ["work"], place: "nyc" } } });
+  await t("/api/posts", { method: "POST", body: { title: "Secret", date: "2026-02-03", published: 0, fields: { tags: ["nyc"] } } });
+  const reader = browser("18.0.0.2");
+
+  // The blog's own feed, with archizzl-style #tag links and post links.
+  const feed = await (await reader("/tagger?a")).text();
+  assert.match(feed, /<title>Tag Blog! · kyle maclachlan photography<\/title>/);
+  assert.match(feed, /<a href="\/tagger\/in-nyc">In NYC<\/a>/);
+  assert.match(feed, /<a class="tag" href="\/tagger\?tag=NYC"[^>]*>#NYC<\/a>/);
+  assert.ok(!feed.includes("Secret"));
+
+  // A tag feed: case doesn't matter, only tags fields count (not the "place" text field), drafts stay out.
+  const tagged = await (await reader("/tagger?tag=nyc")).text();
+  assert.ok(tagged.includes("In NYC"));
+  assert.ok(!tagged.includes("At Work"));
+  assert.match(tagged, /showing <a class="tag"[^>]*>#nyc<\/a> <a class="clear" href="\/tagger">\(clear\)<\/a>/);
+
+  // One post on its own, with a way back.
+  const one = await (await reader("/tagger/at-work")).text();
+  assert.match(one, /<title>At Work · Tag Blog! · /);
+  assert.match(one, /← all of Tag Blog!/);
+  assert.ok(!one.includes("In NYC"));
+  assert.equal((await reader("/tagger/secret")).status, 404); // a draft
+  assert.equal((await reader("/tagger/nope")).status, 404);
+  assert.equal((await reader("/no-such-blog")).status, 404);
+
+  // The blog's name works too, and goes to the username address.
+  const byName = await reader("/tag-blog?tag=work");
+  assert.equal(byName.status, 301);
+  assert.equal(byName.headers.get("location"), `${ORIGIN}/tagger?tag=work`);
 });

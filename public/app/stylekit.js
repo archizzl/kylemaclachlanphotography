@@ -46,7 +46,7 @@ export const CONTROLS = [
   { group: "links", key: "link", label: "colour", type: "color" },
   { group: "links", key: "underline", label: "underline", type: "select", options: opts(NOT_SET, ["always", "always"], ["hover", "only on hover"], ["never", "never"]) },
 
-  { group: "tags", key: "tags", label: "tags look", type: "select", options: opts(NOT_SET, ["outline", "outlined pills"], ["filled", "filled pills"], ["plain", "plain text with #"], ["square", "square labels"]) },
+  { group: "tags", key: "tags", label: "tags look", type: "select", options: opts(["", "#tags (the default)"], ["outline", "outlined pills"], ["filled", "filled pills"], ["square", "square labels"]) },
   { group: "tags", key: "tagColor", label: "colour", type: "color" },
 
   { group: "photos", key: "corners", label: "corners", type: "select", options: opts(NOT_SET, ["0", "square"], ["6px", "a little round"], ["18px", "very round"]) },
@@ -73,7 +73,7 @@ export const PRESETS = {
   "start fresh": {},
   "clean": { font: "system", size: "17px", leading: "1.7", width: "620px", titleWeight: "700", titleSize: "1.5em", date: "faded", underline: "hover", tags: "outline", corners: "6px", gap: "3em", divider: "line" },
   "notebook": { font: "comic", size: "18px", leading: "1.7", text: "#3b3355", titleSize: "1.5em", titleColor: "#ff7eb6", date: "badge", tags: "filled", tagColor: "#ffe66d", corners: "18px", frame: "thick", card: "#ffffff", cardEdge: "both", gap: "3em", accent: "#7ec8ff" },
-  "newspaper": { font: "times", size: "18px", leading: "1.5", align: "justify", titleFont: "serif", titleSize: "2em", titleWeight: "900", titleAlign: "center", date: "italic", underline: "always", tags: "plain", corners: "0", frame: "thin", divider: "dots", gap: "3em" },
+  "newspaper": { font: "times", size: "18px", leading: "1.5", align: "justify", titleFont: "serif", titleSize: "2em", titleWeight: "900", titleAlign: "center", date: "italic", underline: "always", corners: "0", frame: "thin", divider: "dots", gap: "3em" },
   "typewriter": { font: "mono", size: "15px", leading: "1.7", width: "620px", titleStyle: "lower", titleWeight: "400", titleSize: "1.2em", date: "faded", tags: "square", underline: "always", corners: "0", frame: "thin", divider: "dashed", gap: "3em" },
   "night": { font: "sans", size: "17px", leading: "1.6", text: "#e6e3f2", titleStyle: "upper", titleWeight: "900", titleColor: "#b6ff00", link: "#b6ff00", underline: "hover", date: "faded", tags: "outline", tagColor: "#8a5cff", frame: "shadow", corners: "6px", divider: "line", gap: "3em", accent: "#8a5cff", siteBg: "#07060c", siteText: "#e6e3f2", siteFont: "sans" },
 };
@@ -130,14 +130,19 @@ export function cssFrom(s) {
   if (s.tags === "outline") { add(tagSel, "border", `1px solid ${tc || "currentColor"}`); add(tagSel, "border-radius", "99px"); add(tagSel, "background", "transparent"); if (tc) add(tagSel, "color", tc); }
   if (s.tags === "filled") { add(tagSel, "border", "1px solid transparent"); add(tagSel, "border-radius", "99px"); add(tagSel, "background", tc || "rgba(0, 0, 0, 0.08)"); add(tagSel, "color", "inherit"); }
   if (s.tags === "square") { add(tagSel, "border", `1px solid ${tc || "currentColor"}`); add(tagSel, "border-radius", "0"); add(tagSel, "text-transform", "uppercase"); add(tagSel, "font-size", "0.75em"); add(tagSel, "letter-spacing", "0.05em"); }
-  if (s.tags === "plain") { add(".kmp-tag", "border", "0"); add(".kmp-tag", "padding", "0"); add(".kmp-tag::before", "content", '"#"'); if (tc) add(".kmp-tag", "color", tc); }
-  if (s.tags && s.tags !== "plain") add(tagSel, "padding", "0.05em 0.7em");
   if (s.tags) {
+    // Pills and labels replace the default #tag look: no "#", full strength, a little padding.
+    add(tagSel, "padding", "0.05em 0.7em");
+    add(tagSel, "opacity", "1");
+    add(tagSel, "display", "inline-block");
+    add(tagSel, "margin", "0 0.3em 0.3em 0");
+    add(".kmp-tag::before, .kmp-menu button::before", "content", "none");
     add('.kmp-menu button[aria-pressed="true"]', "outline", `2px solid ${s.text || "currentColor"}`);
     add('.kmp-menu button[aria-pressed="true"]', "outline-offset", "1px");
     add('.kmp-menu button[aria-pressed="true"]', "font-weight", "bold");
+    add('.kmp-menu button[aria-pressed="true"]', "text-decoration", "none");
   }
-  if (!s.tags && tc) add(".kmp-tag", "color", tc);
+  if (!s.tags && tc) { add(".kmp-tag, .kmp-menu button", "color", tc); add(".kmp-tag, .kmp-menu button", "opacity", "1"); }
 
   // photos
   const img = ".kmp-body img, .kmp-image img";

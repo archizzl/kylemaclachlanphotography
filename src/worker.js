@@ -23,6 +23,7 @@ import { renderInline, renderMarkdown } from "./markdown.js";
 import { cacheControlFor, checkUpload, cleanDomain, cleanFileText, cleanPost, cleanSettings, contentMatches, isImage, usernameProblem } from "./rules.js";
 import { jsonFeed, postMarkdownFile, postMdKey, publicImage, publicPost, publicUser, rssFeed } from "./feeds.js";
 import { homePage, loadHome } from "./home.js";
+import { slugify } from "./rules.js";
 import { appBilling, costReport, loadCostData, nextRenewal, RATES, reportFor, storedNow } from "./costs.js";
 import { measuredByMonth, syncR2Usage, syncStatus } from "./r2usage.js";
 import { cleanFieldDefs, cleanPostFields, growChoices, listQuery, parseJson } from "./fields.js";
@@ -70,12 +71,13 @@ async function route(request, env, ctx) {
 
   // ---- the public front page ----
   if (path === "/" && (method === "GET" || method === "HEAD")) {
-    return cachedPublic(request, ctx, async () => {
-      const blog = String(url.searchParams.get("blog") || "").slice(0, 30);
-      const page = Math.min(1000, Math.max(1, parseInt(url.searchParams.get("page"), 10) || 1));
-      const data = await loadHome(env, { blog, page });
-      return html(homePage(data, { cdnBase: cdnBase(env) }), 200, { "cache-control": `public, max-age=${PUBLIC_CACHE_SECONDS}`, "x-frame-options": "DENY" });
-    });
+    // Old-style /?blog=<name> links go to /<name>.
+    const legacy = url.searchParams.get("blog");
+    if (legacy && /^[a-z0-9-]{1,30}$/.test(legacy)) {
+      const page = url.searchParams.get("page");
+      return Response.redirect(`${url.origin}/${legacy}${page ? `?page=${encodeURIComponent(page)}` : ""}`, 301);
+    }
+    return cachedPublic(request, ctx, () => frontPage(env, url, {}));
   }
 
   // ---- friends signing in ----
@@ -118,7 +120,30 @@ async function route(request, env, ctx) {
   if (img && (method === "GET" || method === "HEAD")) return cachedPublic(request, ctx, () => publicImageRoute(img[1], img[2], env));
   if (method === "OPTIONS" && (pub || img)) return new Response(null, { status: 204, headers: CORS });
 
+  // ---- one blog's feed, and one post: /<blog>, /<blog>?tag=x, /<blog>/<post> ----
+  const bp = path.match(/^\/([a-z0-9-]{1,30})(?:\/([a-z0-9-]{1,80}))?$/);
+  if (bp && (method === "GET" || method === "HEAD")) {
+    return cachedPublic(request, ctx, () => frontPage(env, url, { blog: bp[1], slug: bp[2] || "" }));
+  }
+
   return env.ASSETS ? env.ASSETS.fetch(request) : new Response("Not found", { status: 404 });
+}
+
+async function frontPage(env, url, { blog = "", slug = "" }) {
+  const page = Math.min(1000, Math.max(1, parseInt(url.searchParams.get("page"), 10) || 1));
+  const tag = String(url.searchParams.get("tag") || "").trim().slice(0, 40);
+  const data = await loadHome(env, { blog, page, tag, slug });
+  if (blog && !data.blogExists) {
+    // /<blog name> also works, e.g. /archizzl for the blog called "archizzl": send it to /<username>.
+    const { results } = await env.DB.prepare("SELECT username, display_name FROM users WHERE disabled = 0 AND display_name != ''").all();
+    const match = results.filter(u => slugify(u.display_name) === blog);
+    if (match.length === 1) return Response.redirect(`${url.origin}/${match[0].username}${slug ? `/${slug}` : ""}${url.search}`, 301);
+    return html(simplePage("not found", `there's no blog called ${blog} here. <a href="/">see everything</a>.`), 404);
+  }
+  if (slug && !data.posts.length) {
+    return html(simplePage("not found", `that post isn't here. <a href="/${blog}">see the rest of the blog</a>.`), 404);
+  }
+  return html(homePage(data, { cdnBase: cdnBase(env) }), 200, { "cache-control": `public, max-age=${PUBLIC_CACHE_SECONDS}`, "x-frame-options": "DENY" });
 }
 
 // ---- friend login ----
