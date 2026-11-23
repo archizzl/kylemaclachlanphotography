@@ -35,7 +35,8 @@ test("field definitions are checked", () => {
   assert.ok(cleanFieldDefs([{ name: "", kind: "text" }])[1]);
   assert.ok(cleanFieldDefs([{ name: "x", kind: "photo" }])[1]);
   assert.ok(cleanFieldDefs([{ name: "x", kind: "tags", choices: [] }])[1]);
-  assert.ok(cleanFieldDefs(Array.from({ length: 11 }, (_, i) => ({ name: `f${i}`, kind: "text" })))[1]);
+  // No cap on how many fields a blog has.
+  assert.equal(cleanFieldDefs(Array.from({ length: 40 }, (_, i) => ({ name: `f${i}`, kind: "text" })))[1], null);
 });
 
 test("a post's values only keep what the blog has set up", () => {
@@ -63,12 +64,12 @@ test("open tag fields take any tag and learn new ones", () => {
   assert.ok(cleanFieldDefs([{ name: "tags", kind: "tags", choices: "" }])[1]);
 
   const withNyc = [{ ...defs[0], choices: ["nyc"] }];
-  const values = cleanPostFields(withNyc, { tags: ["NYC", "bluegrass", " bluegrass ", "", "x".repeat(60)] });
-  assert.deepEqual(values.tags, ["nyc", "bluegrass", "x".repeat(40)]); // known spelling kept, dupes dropped, trimmed
+  const values = cleanPostFields(withNyc, { tags: ["NYC", "bluegrass", " bluegrass ", "", "x".repeat(60), "y".repeat(150)] });
+  assert.deepEqual(values.tags, ["nyc", "bluegrass", "x".repeat(60), "y".repeat(100)]); // known spelling kept, dupes dropped, one line
   assert.deepEqual(cleanPostFields(withNyc, { tags: "work, interior-design" }).tags, ["work", "interior-design"]);
-  assert.equal(cleanPostFields(withNyc, { tags: Array.from({ length: 30 }, (_, i) => `t${i}`) }).tags.length, 20);
+  assert.equal(cleanPostFields(withNyc, { tags: Array.from({ length: 300 }, (_, i) => `t${i}`) }).tags.length, 300); // no cap
 
   const grown = growChoices(withNyc, values);
-  assert.deepEqual(grown[0].choices, ["nyc", "bluegrass", "x".repeat(40)]);
+  assert.deepEqual(grown[0].choices, ["nyc", "bluegrass", "x".repeat(60), "y".repeat(100)]);
   assert.equal(growChoices(withNyc, { tags: ["nyc"] }), null); // nothing new
 });

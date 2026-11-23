@@ -3,6 +3,7 @@
  *
  *   <script src="https://kylemaclachlanphotography.org/embed.js" data-user="maya" data-post="my-post" async></script>
  *   <script src="https://kylemaclachlanphotography.org/embed.js" data-user="maya" data-list="10" async></script>
+ *   (data-list="all" shows every post, however many there are)
  *   <script src="https://kylemaclachlanphotography.org/embed.js" data-user="maya" data-image="beach.jpg" async></script>
  *
  * Lists can use the blog's own post fields (set up in the dashboard's settings):
@@ -48,7 +49,7 @@
       ":where(button.kmp-tag:hover){text-decoration:underline;opacity:1}" +
       ":where(.kmp-menu){display:flex;flex-wrap:wrap;align-items:center;gap:.4em;margin:0 0 1.5em}" +
       ":where(.kmp-menu-label){opacity:.7;margin-right:.3em}" +
-      ":where(button.kmp-tag){font:inherit;font-size:inherit;color:inherit;background:none;cursor:pointer}" +
+      ":where(button.kmp-tag){font:inherit;font-size:inherit;color:inherit;background:none;border:0;padding:0;cursor:pointer}" +
       ":where(.kmp-menu button){font:inherit;color:inherit;background:none;border:0;padding:0 .2em;cursor:pointer;opacity:.55}" +
       ":where(.kmp-menu button:hover){text-decoration:underline;opacity:1}" +
       ":where(.kmp-menu button:not([data-value='']))::before{content:'#'}" +
@@ -284,17 +285,35 @@
     else if (slugAttr) url = base + encodeURIComponent(slugAttr) + ".json";
     else {
       var q = new URLSearchParams();
-      q.set("limit", parseInt(attr("list"), 10) || (opts.group || opts.menu ? 50 : 10));
+      var wantAll = attr("list") === "all";
+      var want = wantAll ? Infinity : parseInt(attr("list"), 10) || (opts.group || opts.menu ? 50 : 10);
       (attr("filter") || "").split(",").forEach(function (f) { if (f.trim()) q.append("filter", f.trim()); });
       if (attr("sort")) q.set("sort", attr("sort"));
       url = base + "posts.json?" + q.toString();
     }
 
-    fetch(url)
-      .then(function (r) {
+    function getJson(u) {
+      return fetch(u).then(function (r) {
         if (!r.ok) throw new Error(r.status);
         return r.json();
-      })
+      });
+    }
+    // The server answers 50 posts at a time; for longer lists, keep asking until there are enough.
+    function getList() {
+      var PAGE = 50, posts = [], user;
+      function next(offset) {
+        var take = Math.min(PAGE, want - posts.length);
+        return getJson(url + "&limit=" + take + "&offset=" + offset).then(function (d) {
+          user = d.user;
+          posts = posts.concat(d.posts || []);
+          var done = (d.posts || []).length < take || posts.length >= want;
+          return done ? { user: user, posts: posts } : next(offset + take);
+        });
+      }
+      return next(0);
+    }
+
+    (image || slugAttr ? getJson(url) : getList())
       .then(function (data) {
         if (data.image) return box.appendChild(figure(data.image, opts));
         if (data.post) return box.appendChild(article(data.post, (data.user && data.user.fields) || [], opts));

@@ -135,6 +135,6 @@ test("feeds have the right shape and escape their contents", () => {
 });
 
 test("alt text and captions are trimmed to one line", () => {
-  assert.deepEqual(cleanFileText({ alt: " a\n dog ", caption: "x".repeat(2000) }), { alt: "a dog", caption: "x".repeat(1000) });
+  assert.deepEqual(cleanFileText({ alt: " a\n dog ", caption: "x".repeat(2000) }), { alt: "a dog", caption: "x".repeat(2000) });
   assert.deepEqual(cleanFileText(null), { alt: "", caption: "" });
 });

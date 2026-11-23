@@ -16,13 +16,14 @@
 
 import {
   adminCookie, checkPassword, clearAdminCookie, clearFails, createAgentKey, currentUser, endAllSessions, endSession,
-  generatePassword, hashPassword, isAdmin, LOCKED_MESSAGE, lockedOut, MAX_ACCOUNT_FAILS, MAX_AGENT_KEYS, passwordProblem, recordFail, revokeAllAgentKeys, same,
+  generatePassword, hashPassword, isAdmin, LOCKED_MESSAGE, lockedOut, MAX_ACCOUNT_FAILS, passwordProblem, recordFail, revokeAllAgentKeys, same,
   startSession, userFromAgentKey,
 } from "./auth.js";
 import { renderInline, renderMarkdown } from "./markdown.js";
 import { cacheControlFor, checkUpload, cleanDomain, cleanFileText, cleanPost, cleanSettings, contentMatches, isImage, usernameProblem } from "./rules.js";
 import { jsonFeed, postMarkdownFile, postMdKey, publicImage, publicPost, publicUser, rssFeed } from "./feeds.js";
 import { homePage, loadHome } from "./home.js";
+import { cleanLook } from "../public/app/stylekit.js";
 import { slugify } from "./rules.js";
 import { appBilling, costReport, loadCostData, nextRenewal, RATES, reportFor, storedNow } from "./costs.js";
 import { measuredByMonth, syncR2Usage, syncStatus } from "./r2usage.js";
@@ -31,6 +32,8 @@ import { adminLoginPage, adminPage, dashboardPage, loginPage, simplePage } from 
 import { html, json, now, readJson, redirect } from "./util.js";
 
 const PUBLIC_CACHE_SECONDS = 60;
+// Per request, to keep each answer a sensible size; lists page through with ?offset= (embed.js
+// does that by itself for data-list="all").
 const MAX_LIST = 50;
 const MAX_BRIEF = 1000;
 
@@ -130,8 +133,8 @@ async function route(request, env, ctx) {
 }
 
 async function frontPage(env, url, { blog = "", slug = "" }) {
-  const page = Math.min(1000, Math.max(1, parseInt(url.searchParams.get("page"), 10) || 1));
-  const tag = String(url.searchParams.get("tag") || "").trim().slice(0, 40);
+  const page = Math.max(1, parseInt(url.searchParams.get("page"), 10) || 1);
+  const tag = String(url.searchParams.get("tag") || "").trim().slice(0, 100);
   const data = await loadHome(env, { blog, page, tag, slug });
   if (blog && !data.blogExists) {
     // /<blog name> also works, e.g. /archizzl for the blog called "archizzl": send it to /<username>.
@@ -212,7 +215,7 @@ async function admin(path, method, request, env) {
   if (path === "/admin/users" && method === "POST") {
     const form = await request.formData();
     const username = String(form.get("username") || "").trim().toLowerCase();
-    const displayName = String(form.get("display_name") || "").trim().slice(0, 100);
+    const displayName = String(form.get("display_name") || "").trim().slice(0, 200);
     const typed = String(form.get("password") || "").trim();
     const password = typed || generatePassword();
     const problem =
@@ -322,6 +325,7 @@ async function api(path, method, request, env, user, url) {
       site_url: user.site_url,
       post_url_pattern: user.post_url_pattern,
       fields: parseJson(user.fields_json, []),
+      look: user.look_json ? parseJson(user.look_json, null) : null,
       cdn: `${base}/${user.username}/`,
       feeds: { rss: `${siteOrigin(env, url)}/${user.username}/feed.xml`, json: `${siteOrigin(env, url)}/${user.username}/feed.json` },
     });
@@ -354,6 +358,21 @@ async function api(path, method, request, env, user, url) {
     });
   }
 
+  // The blog's look from the style tab, and other blogs' looks to start from.
+  if (path === "/api/look" && method === "PUT") {
+    const look = cleanLook((await readJson(request))?.look);
+    await env.DB.prepare("UPDATE users SET look_json = ? WHERE id = ?").bind(Object.keys(look).length ? JSON.stringify(look) : "", user.id).run();
+    return json({ look });
+  }
+  if (path === "/api/looks" && method === "GET") {
+    const { results } = await env.DB.prepare(
+      "SELECT username, display_name, look_json FROM users WHERE disabled = 0 AND id != ? AND look_json != '' ORDER BY lower(CASE WHEN display_name = '' THEN username ELSE display_name END)"
+    )
+      .bind(user.id)
+      .all();
+    return json({ looks: results.map(u => ({ username: u.username, name: u.display_name || u.username, look: cleanLook(parseJson(u.look_json, {})) })) });
+  }
+
   // The blog's own post fields (tags, numbers, text).
   if (path === "/api/fields" && method === "PUT") {
     const body = (await readJson(request)) || {};
@@ -368,8 +387,6 @@ async function api(path, method, request, env, user, url) {
     return json({ keys: results });
   }
   if (path === "/api/keys" && method === "POST") {
-    const count = await env.DB.prepare("SELECT COUNT(*) AS n FROM agent_keys WHERE user_id = ?").bind(user.id).first();
-    if (count.n >= MAX_AGENT_KEYS) return json({ error: `You can have up to ${MAX_AGENT_KEYS} agent keys. Revoke one you don't use first.` }, 400);
     const body = (await readJson(request)) || {};
     return json({ key: await createAgentKey(env, user.id, body.label) });
   }

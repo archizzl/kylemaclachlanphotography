@@ -19,7 +19,7 @@ export function embedCode(o) {
     if (o.caption === false) a.push(`data-caption="no"`);
     if (o.photoUrl) fallback = `<noscript><img src="${attrEsc(o.photoUrl)}" alt="${attrEsc(o.photoAlt)}"></noscript>`;
   } else {
-    a.push(`data-list="${Number(o.count) || 10}"`);
+    a.push(`data-list="${o.count === "all" ? "all" : Number(o.count) || 10}"`);
     const filters = Object.entries(o.filters || {}).filter(([, v]) => v !== "" && v != null);
     if (filters.length) a.push(`data-filter="${attrEsc(filters.map(([k, v]) => `${k}:${v}`).join(","))}"`);
     if (o.sort) a.push(`data-sort="${attrEsc(o.sort)}"`);

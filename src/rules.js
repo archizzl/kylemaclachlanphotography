@@ -34,21 +34,22 @@ export function slugify(text) {
 // Returns [cleanPost, problem]. problem is a sentence to show the friend, or null.
 export function cleanPost(input) {
   const p = input || {};
-  const title = String(p.title || "").trim().slice(0, 200);
+  const title = String(p.title || "").replace(/\s+/g, " ").trim().slice(0, 1000);
   if (!title) return [null, "Give the post a title."];
   let slug = slugify(p.slug || title);
   // posts.json and feed.json are taken.
   if (slug === "posts" || slug === "feed") slug += "-post";
   const date = /^\d{4}-\d{2}-\d{2}$/.test(String(p.date || "")) && !isNaN(Date.parse(p.date)) ? p.date : today();
   const body = String(p.body || "");
-  if (body.length > 200000) return [null, "That post is too long (200,000 characters at most)."];
+  // A post and its HTML share one database row, which Cloudflare caps at 2 MB.
+  if (body.length > 200000) return [null, "That post is too long (200,000 characters at most). Try splitting it into parts."];
   return [{ title, slug, date, body, published: p.published ? 1 : 0 }, null];
 }
 
 // Returns [cleanSettings, problem].
 export function cleanSettings(input) {
   const s = input || {};
-  const displayName = String(s.display_name || "").trim().slice(0, 100);
+  const displayName = String(s.display_name || "").trim().slice(0, 200);
   const siteRaw = String(s.site_url || "").trim();
   const site = webUrl(siteRaw);
   if (siteRaw && !site) return [null, "Your site address should start with https://"];
@@ -74,6 +75,7 @@ export function cleanDomain(input) {
 
 // ---- uploads ----
 
+// The Worker holds an upload in memory (128 MB) while it checks it, so files stay well under that.
 export const MAX_UPLOAD = 25 * 1024 * 1024;
 
 // Extension -> served type. SVG, HTML and scripts are deliberately missing: the CDN only hosts
@@ -104,7 +106,7 @@ export function safeFileName(name) {
     .toLowerCase()
     .replace(/[^a-z0-9_-]+/g, "-")
     .replace(/^-+|-+$/g, "")
-    .slice(0, 60) || "file";
+    .slice(0, 120) || "file";
   return ext ? `${base}.${ext}` : base;
 }
 
@@ -140,5 +142,5 @@ export const isImage = type => type.startsWith("image/");
 // Alt text describes an image for people who can't see it; the caption shows under it.
 export function cleanFileText(input) {
   const oneLine = (v, max) => String(v || "").replace(/\s+/g, " ").trim().slice(0, max);
-  return { alt: oneLine(input?.alt, 500), caption: oneLine(input?.caption, 1000) };
+  return { alt: oneLine(input?.alt, 2000), caption: oneLine(input?.caption, 5000) };
 }

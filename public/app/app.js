@@ -1,6 +1,6 @@
 // The friend dashboard: posts, files, embed, style, settings. Talks to /api/* in src/worker.js.
 
-import { CONTROLS, PRESETS, SITE_CONTROLS, cssFrom, siteFontStack } from "./stylekit.js";
+import { CONTROLS, DEFAULT_LOOK, SITE_CONTROLS, cssFrom, siteFontStack } from "./stylekit.js";
 import { embedCode, sortChoices } from "./embedkit.js";
 
 const { username, cdnBase, origin } = window.KMP;
@@ -207,6 +207,7 @@ async function editView(id) {
   slug.addEventListener("input", () => { slugTouched = true; changed(); });
   date.addEventListener("input", changed);
   $("#postfields")?.addEventListener("input", changed);
+  setupTagInputs($("#postfields"), me.fields || [], changed);
   body.addEventListener("input", () => { changed(); clearTimeout(previewTimer); previewTimer = setTimeout(preview, 350); });
   preview();
 
@@ -230,6 +231,7 @@ async function editView(id) {
         me = await api("me");
         $("#postfields").outerHTML = fieldInputs(me.fields, post.fields || {}, false);
         $("#postfields")?.addEventListener("input", changed);
+        setupTagInputs($("#postfields"), me.fields || [], changed);
       }
       status.textContent = "saved";
       buttons();
@@ -318,11 +320,14 @@ function fieldInputs(defs, values, isNew) {
     .map(d => {
       const v = values[d.key];
       if (d.kind === "tags") {
-        // Open fields also take new tags, typed in; they join the list when the post is saved.
-        const extra = d.open ? (v || []).filter(t => !d.choices.includes(t)) : [];
-        return `<div class="pf"><span class="pf-name">${esc(d.name)}</span><span class="chips">${[...d.choices, ...extra]
-          .map(c => `<label><input type="checkbox" name="${esc(d.key)}" value="${esc(c)}"${(v || []).includes(c) ? " checked" : ""}>${esc(c)}</label>`)
-          .join("")}${d.open ? `<input class="newtags" data-key="${esc(d.key)}" placeholder="new tags, separated by commas" aria-label="new ${esc(d.name)}">` : ""}</span></div>`;
+        // Just this post's tags, plus a box to type more; matching tags drop down as you type.
+        return `<div class="pf"><span class="pf-name">${esc(d.name)}</span>
+          <div class="taginput" data-key="${esc(d.key)}" data-values="${esc(JSON.stringify(v || []))}">
+            <span class="chosen"></span>
+            <input class="tagtyper" autocomplete="off" spellcheck="false" role="combobox" aria-expanded="false" aria-autocomplete="list"
+              aria-label="add ${esc(d.name)}" placeholder="${d.open ? "type a tag…" : `type to add ${esc(d.name)}…`}">
+            <ul class="suggest" role="listbox" hidden></ul>
+          </div></div>`;
       }
       if (d.kind === "number") {
         const hint = d.auto && isNew ? "counts up by itself" : "";
@@ -337,9 +342,13 @@ function readFieldInputs(defs) {
   const out = {};
   for (const d of defs) {
     if (d.kind === "tags") {
-      const checked = [...app.querySelectorAll(`#postfields input[name="${CSS.escape(d.key)}"]:checked`)].map(i => i.value);
-      const typed = (app.querySelector(`#postfields .newtags[data-key="${CSS.escape(d.key)}"]`)?.value || "").split(",").map(s => s.trim()).filter(Boolean);
-      out[d.key] = [...checked, ...typed];
+      const box = app.querySelector(`#postfields .taginput[data-key="${CSS.escape(d.key)}"]`);
+      const chosen = box ? JSON.parse(box.dataset.values || "[]") : [];
+      // Something typed but not added yet still counts (in a fixed list, only if it's on the list).
+      const typed = (box?.querySelector(".tagtyper").value || "").split(",").map(s => s.trim()).filter(Boolean)
+        .map(t => d.open ? t : d.choices.find(c => c.toLowerCase() === t.toLowerCase()))
+        .filter(Boolean);
+      out[d.key] = [...chosen, ...typed];
     }
     else {
       const v = document.getElementById(`field-${d.key}`)?.value ?? "";
@@ -347,6 +356,102 @@ function readFieldInputs(defs) {
     }
   }
   return out;
+}
+
+// Tag boxes: chips for the post's tags, a type-ahead dropdown of matching tags, and (in open
+// fields) any new tag. Keys: ↓/↑ to move, Enter, Tab or comma to add, Backspace to remove the last.
+function setupTagInputs(container, defs, onChange) {
+  for (const box of container?.querySelectorAll(".taginput") || []) {
+    const def = defs.find(d => d.key === box.dataset.key);
+    if (!def) continue;
+    const typer = box.querySelector(".tagtyper");
+    const list = box.querySelector(".suggest");
+    const chosenEl = box.querySelector(".chosen");
+    let values = JSON.parse(box.dataset.values || "[]");
+    let options = [];
+    let active = 0;
+    const lower = s => s.toLowerCase();
+    const has = t => values.some(v => lower(v) === lower(t));
+
+    function save() {
+      box.dataset.values = JSON.stringify(values);
+      chosenEl.innerHTML = values
+        .map((v, i) => `<span class="chip">${esc(v)}<button type="button" data-remove="${i}" aria-label="remove ${esc(v)}">×</button></span>`)
+        .join("");
+    }
+    function close() {
+      list.hidden = true;
+      typer.setAttribute("aria-expanded", "false");
+    }
+    function suggest() {
+      const q = typer.value.trim();
+      if (!q) return close();
+      const lq = lower(q);
+      const matches = def.choices
+        .filter(c => !has(c) && lower(c).includes(lq))
+        .sort((a, b) => lower(b).startsWith(lq) - lower(a).startsWith(lq) || a.localeCompare(b));
+      options = matches.map(c => ({ tag: c, label: c }));
+      const exact = def.choices.some(c => lower(c) === lq) || has(q);
+      if (def.open && !exact) options.push({ tag: q, label: `add “${q}” as a new tag` });
+      active = 0;
+      list.innerHTML = options.length
+        ? options.map((o, i) => `<li role="option" data-i="${i}" class="${i === active ? "on" : ""}${o.label !== o.tag ? " new" : ""}">${esc(o.label)}</li>`).join("")
+        : `<li class="none">${has(q) ? "already added" : `no ${esc(def.name)} like that`}</li>`;
+      list.hidden = false;
+      typer.setAttribute("aria-expanded", "true");
+    }
+    function add(tag) {
+      const known = def.choices.find(c => lower(c) === lower(tag));
+      const t = known || (def.open ? tag.trim() : "");
+      if (!t || has(t)) return;
+      values.push(t);
+      save();
+      typer.value = "";
+      close();
+      onChange();
+    }
+    function highlight(i) {
+      active = (i + options.length) % options.length;
+      list.querySelectorAll("li[data-i]").forEach(li => li.classList.toggle("on", Number(li.dataset.i) === active));
+    }
+
+    typer.addEventListener("input", () => {
+      // Typing or pasting "a, b, c" adds the finished ones straight away.
+      if (typer.value.includes(",")) {
+        const parts = typer.value.split(",");
+        const last = parts.pop();
+        for (const p of parts) if (p.trim()) add(p.trim());
+        typer.value = last.trimStart();
+      }
+      suggest();
+    });
+    typer.addEventListener("keydown", ev => {
+      if (ev.key === "ArrowDown" && options.length) { ev.preventDefault(); if (list.hidden) suggest(); else highlight(active + 1); }
+      else if (ev.key === "ArrowUp" && options.length) { ev.preventDefault(); highlight(active - 1); }
+      else if ((ev.key === "Enter" || (ev.key === "Tab" && typer.value.trim())) && !list.hidden && options[active]) { ev.preventDefault(); add(options[active].tag); }
+      else if (ev.key === "Enter") ev.preventDefault();
+      else if (ev.key === "Escape") close();
+      else if (ev.key === "Backspace" && !typer.value && values.length) { values.pop(); save(); onChange(); }
+    });
+    typer.addEventListener("blur", () => setTimeout(close, 150));
+    list.addEventListener("mousedown", ev => {
+      const li = ev.target.closest("li[data-i]");
+      if (!li) return;
+      ev.preventDefault(); // keep focus in the box
+      add(options[Number(li.dataset.i)].tag);
+      typer.focus();
+    });
+    chosenEl.addEventListener("click", ev => {
+      const i = ev.target.dataset.remove;
+      if (i === undefined) return;
+      values.splice(Number(i), 1);
+      save();
+      onChange();
+      typer.focus();
+    });
+    box.addEventListener("click", ev => { if (ev.target === box || ev.target === chosenEl) typer.focus(); });
+    save();
+  }
 }
 
 // ---- setting up post fields ----
@@ -471,7 +576,7 @@ async function embedView(kind, which) {
   const photos = files.filter(f => f.content_type.startsWith("image/"));
   const fields = me.fields || [];
   const tagFields = fields.filter(f => f.kind === "tags" && (f.choices || []).length);
-  const saved = loadStyle();
+  const saved = myLook();
   const look = cssFrom(saved);
 
   // Opened from a post or photo's "embed code" button: start with that one.
@@ -489,7 +594,7 @@ async function embedView(kind, which) {
     const show = [["list", "my latest posts"], ["post", "one post"], ["photo", "one photo"]];
     let h = `<label>show ${sel("show", show, o.show)}</label>`;
     if (o.show === "list") {
-      h += `<label>how many ${sel("count", [5, 10, 20, 50].map(n => [n, `up to ${n}`]), o.count)}</label>`;
+      h += `<label>how many ${sel("count", [...[5, 10, 20, 50].map(n => [n, `the newest ${n}`]), ["all", "all of them"]], o.count)}</label>`;
       h += `<label>order ${sel("sort", sortChoices(fields), o.sort)}</label>`;
       for (const f of tagFields) {
         h += `<label>only ${esc(f.name)} <select data-filter="${esc(f.key)}"><option value="">any</option>${f.choices
@@ -567,23 +672,30 @@ async function embedView(kind, which) {
 }
 
 // ---- style playground ----
-// Try out looks on your own posts, then copy the CSS into your site. Nothing here changes KMP:
-// the CSS only does anything once it's on your own page.
+// Try out looks on your own posts, then copy the CSS into your site. Your look is saved on KMP so
+// other blogs can start from it, but it never changes anyone's site: only the copied CSS does.
 
-const STYLE_KEY = `kmp-style-${username}`;
-function loadStyle() {
-  try { return JSON.parse(localStorage.getItem(STYLE_KEY)) || {}; } catch { return {}; }
-}
-function saveStyle(s) {
-  try { localStorage.setItem(STYLE_KEY, JSON.stringify(s)); } catch {}
+// Your saved look, or the archizzl default if you haven't made one.
+const myLook = () => (me.look && Object.keys(me.look).length ? { ...me.look } : { ...DEFAULT_LOOK });
+
+let lookTimer;
+function saveLook(look) {
+  me.look = look;
+  clearTimeout(lookTimer);
+  lookTimer = setTimeout(() => api("look", { method: "PUT", body: { look } }).catch(err => toast(err.message, true)), 600);
 }
 
 async function styleView() {
-  let s = loadStyle();
-  const [{ posts }, { files }] = await Promise.all([api("posts"), api("files")]);
+  let s = myLook();
+  const [{ posts }, { files }, { looks }] = await Promise.all([api("posts"), api("files"), api("looks")]);
   const published = posts.filter(p => p.published);
   const photo = files.find(f => f.content_type.startsWith("image/"));
   const tagsField = (me.fields || []).find(d => d.kind === "tags");
+
+  // What the preview shows: checkboxes, remembered for next time in this browser.
+  const SHOW_KEY = `kmp-style-preview-${username}`;
+  let show = { list: true, menu: Boolean(tagsField), post: false, photo: false };
+  try { Object.assign(show, JSON.parse(localStorage.getItem(SHOW_KEY)) || {}); } catch {}
 
   const control = c => {
     const v = s[c.key] ?? c.def ?? "";
@@ -599,18 +711,20 @@ async function styleView() {
       <input type="color" data-key="${c.key}" value="${esc(v || c.def || "#333333")}"${on || c.def ? "" : " disabled"}></span></label>`;
   };
   const groups = [...new Set(CONTROLS.map(c => c.group))];
-  const sample = [
-    ["list", `your latest posts${tagsField ? `, with ${tagsField.name} buttons` : ""}`],
-    ...(published.length ? [["post", `one post: ${published[0].title}`]] : []),
-    ...(photo ? [["photo", `one photo: ${photo.name}`]] : []),
-  ];
+  const box = (key, label, disabled) =>
+    `<label class="check"><input type="checkbox" data-show="${key}"${show[key] && !disabled ? " checked" : ""}${disabled ? " disabled" : ""}> ${label}</label>`;
 
   frame(
     "style",
     `<p>try out how your posts could look on your own site. the preview uses your real posts. when you like it, copy the css at the bottom into your site.</p>
     <div class="playground">
       <form class="style-controls" id="controls" autocomplete="off">
-        <label>start from <select id="preset"><option value="">pick a look…</option>${Object.keys(PRESETS).map(n => `<option>${esc(n)}</option>`).join("")}</select></label>
+        <label>start from <select id="preset">
+          <option value="">choose…</option>
+          <option value="default">the default (archizzl style)</option>
+          ${looks.map((l, i) => `<option value="${i}">${esc(l.name)}'s look</option>`).join("")}
+        </select></label>
+        ${looks.length ? "" : `<p class="muted" style="font-size:14px;margin:0">other blogs' looks show up here once they make one.</p>`}
         ${groups.map(g => `<fieldset><legend>${esc(g)}</legend>${CONTROLS.filter(c => c.group === g).map(control).join("")}</fieldset>`).join("")}
         <fieldset class="site"><legend>your site (preview only)</legend>
           <p class="muted">roughly what your page looks like around the posts. this isn't in the css.</p>
@@ -618,15 +732,20 @@ async function styleView() {
         </fieldset>
       </form>
       <div class="style-preview">
-        <label>show <select id="sample">${sample.map(([v, l]) => `<option value="${v}">${esc(l)}</option>`).join("")}</select></label>
+        <fieldset class="showwhat"><legend>preview</legend>
+          ${box("list", "my latest posts", !published.length)}
+          ${tagsField ? box("menu", `${esc(tagsField.name)} buttons above them`, !published.length) : ""}
+          ${box("post", published.length ? `one post on its own (“${esc(published[0].title)}”)` : "one post on its own", !published.length)}
+          ${box("photo", "a photo", !photo)}
+        </fieldset>
         <iframe id="stage" title="preview of your posts on your site"></iframe>
         ${published.length ? "" : `<p class="muted">publish a post to see it here.</p>`}
       </div>
     </div>
     <h2>your css</h2>
-    <p class="muted">paste this into your site's stylesheet, or inside <code>&lt;style&gt;…&lt;/style&gt;</code> in your page's <code>&lt;head&gt;</code>. it works with every embed code from this dashboard, and your site's own styles fill in anything you didn't set.${s.font === "atkinson" ? ` Atkinson Hyperlegible is a web font: also add <code>&lt;link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible&amp;display=swap"&gt;</code>.` : ""}</p>
+    <p class="muted">paste this into your site's stylesheet, or inside <code>&lt;style&gt;…&lt;/style&gt;</code> in your page's <code>&lt;head&gt;</code>. it works with every embed code from this dashboard, and your site's own styles fill in anything you didn't set.${s.font === "atkinson" || s.font === "archizzl" ? ` Atkinson Hyperlegible is a web font: if your site doesn't have Calibri or Atkinson, also add <code>&lt;link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible&amp;display=swap"&gt;</code>.` : ""}</p>
     <textarea id="css" class="cssout" readonly></textarea>
-    <div class="toolbar"><button class="primary" id="copycss">copy css</button><button id="resetstyle">start over</button></div>`
+    <div class="toolbar"><button class="primary" id="copycss">copy css</button><button id="resetstyle">back to the default</button></div>`
   );
   app.onclick = null;
 
@@ -634,13 +753,14 @@ async function styleView() {
   const cssBox = $("#css");
 
   // The preview is its own little page, so the dashboard's styles don't leak in.
-  function stageDoc(kind) {
-    const tag = (attrs) => `<script src="${origin}/embed.js" data-user="${username}" ${attrs} async><\/script>`;
-    const embed =
-      kind === "post" ? tag(`data-post="${esc(published[0].slug)}"`)
-      : kind === "photo" ? tag(`data-image="${esc(photo.name)}"`)
-      : tag(`data-list="3"${tagsField ? ` data-menu="${esc(tagsField.key)}"` : ""}`);
-    return `<!doctype html><html><head><meta charset="utf-8"><style id="site"></style><style id="play"></style></head><body>${embed}</body></html>`;
+  function stageDoc() {
+    const tag = attrs => `<script src="${origin}/embed.js" data-user="${username}" ${attrs} async><\/script>`;
+    const parts = [];
+    if (show.list && published.length) parts.push(tag(`data-list="3"${show.menu && tagsField ? ` data-menu="${esc(tagsField.key)}"` : ""}`));
+    if (show.post && published.length) parts.push(tag(`data-post="${esc(published[0].slug)}"`));
+    if (show.photo && photo) parts.push(tag(`data-image="${esc(photo.name)}"`));
+    const body = parts.length ? parts.join('<hr class="kmp-preview-gap">') : `<p style="opacity:.6">tick something to preview.</p>`;
+    return `<!doctype html><html><head><meta charset="utf-8"><style id="site"></style><style>.kmp-preview-gap{border:0;margin:3em 0}</style><style id="play"></style></head><body>${body}</body></html>`;
   }
 
   function apply() {
@@ -650,20 +770,20 @@ async function styleView() {
     if (!doc || !doc.getElementById("play")) return;
     doc.getElementById("play").textContent = css;
     doc.getElementById("site").textContent =
-      `body { margin: 0; padding: 24px; background: ${s.siteBg || "#ffffff"}; color: ${s.siteText || "#111111"}; font-family: ${siteFontStack(s.siteFont)}; }`;
-    saveStyle(s);
+      `body { margin: 0; padding: 24px; background: ${s.siteBg || "#ffffff"}; color: ${s.siteText || "#000000"}; font-family: ${siteFontStack(s.siteFont)}; }`;
   }
 
-  function load(kind) {
+  function load() {
     stage.onload = apply;
-    stage.srcdoc = stageDoc(kind);
+    stage.srcdoc = stageDoc();
   }
-  load($("#sample").value);
+  load();
   apply();
 
   const controls = $("#controls");
   controls.addEventListener("input", ev => {
     const t = ev.target;
+    if (t.id === "preset") return;
     if (t.dataset.on) {
       const colour = controls.querySelector(`input[type=color][data-key="${t.dataset.on}"]`);
       colour.disabled = !t.checked;
@@ -673,18 +793,32 @@ async function styleView() {
       s[t.dataset.key] = t.value;
     } else return;
     apply();
+    saveLook(s);
   });
   $("#preset").onchange = ev => {
-    const p = PRESETS[ev.target.value];
-    if (!p) return;
-    const site = Object.fromEntries(Object.entries(s).filter(([k]) => k.startsWith("site")));
-    s = { ...site, ...p };
-    saveStyle(s);
+    const v = ev.target.value;
+    const from = v === "default" ? DEFAULT_LOOK : looks[Number(v)]?.look;
+    if (!from) return;
+    if (!confirm(`Start from ${v === "default" ? "the default look" : `${looks[Number(v)].name}'s look`}? This replaces your current settings.`)) {
+      ev.target.value = "";
+      return;
+    }
+    saveLook({ ...from });
     styleView();
   };
-  $("#sample").onchange = ev => load(ev.target.value);
+  $(".showwhat").addEventListener("change", ev => {
+    const k = ev.target.dataset.show;
+    if (!k) return;
+    show[k] = ev.target.checked;
+    try { localStorage.setItem(SHOW_KEY, JSON.stringify(show)); } catch {}
+    load();
+  });
   $("#copycss").onclick = () => copy(cssBox.value, "css copied");
-  $("#resetstyle").onclick = () => { s = {}; saveStyle(s); styleView(); };
+  $("#resetstyle").onclick = () => {
+    if (!confirm("Go back to the default look? This replaces your current settings.")) return;
+    saveLook({ ...DEFAULT_LOOK });
+    styleView();
+  };
 }
 
 // ---- agent keys ----

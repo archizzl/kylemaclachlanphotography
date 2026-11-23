@@ -10,7 +10,6 @@ import { excerpt } from "./markdown.js";
 import { parseJson, publicFields } from "./fields.js";
 
 export const HOME_PAGE_SIZE = 20;
-const PHOTO_LIMIT = 200;
 
 export async function loadHome(env, { blog = "", page = 1, tag = "", slug = "" } = {}) {
   const offset = (page - 1) * HOME_PAGE_SIZE;
@@ -39,9 +38,9 @@ export async function loadHome(env, { blog = "", page = 1, tag = "", slug = "" }
   const { results: photos } = await env.DB.prepare(
     `SELECT f.*, u.username, u.display_name FROM files f JOIN users u ON u.id = f.user_id
      WHERE f.content_type LIKE 'image/%' AND f.deleted_at IS NULL AND u.disabled = 0 AND (?1 = '' OR u.username = ?1)
-     ORDER BY f.created_at DESC LIMIT ?2`
+     ORDER BY f.created_at DESC`
   )
-    .bind(only, PHOTO_LIMIT)
+    .bind(only)
     .all();
 
   return {

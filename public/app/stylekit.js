@@ -4,6 +4,7 @@
 
 export const FONTS = {
   "": "your site's font",
+  archizzl: "Calibri / Atkinson (archizzl)",
   serif: "serif (Georgia)",
   sans: "sans (Helvetica)",
   system: "system (San Francisco, Segoe…)",
@@ -13,6 +14,7 @@ export const FONTS = {
   times: "Times",
 };
 const FONT_STACKS = {
+  archizzl: 'Calibri, "Atkinson Hyperlegible", Helvetica, sans-serif',
   serif: 'Georgia, "Times New Roman", serif',
   sans: '"Helvetica Neue", Helvetica, Arial, sans-serif',
   system: "system-ui, -apple-system, \"Segoe UI\", sans-serif",
@@ -65,18 +67,42 @@ export const CONTROLS = [
 // Stand-ins for the person's own page, for the preview only (never in the CSS).
 export const SITE_CONTROLS = [
   { key: "siteBg", label: "background", type: "color", def: "#ffffff" },
-  { key: "siteText", label: "text", type: "color", def: "#111111" },
-  { key: "siteFont", label: "font", type: "select", options: { serif: "serif", sans: "sans", system: "system", mono: "mono", times: "Times" }, def: "serif" },
+  { key: "siteText", label: "text", type: "color", def: "#000000" },
+  { key: "siteFont", label: "font", type: "select", options: { archizzl: "Calibri / Atkinson", serif: "serif", sans: "sans", system: "system", mono: "mono", times: "Times", comic: "Comic Sans" }, def: "archizzl" },
 ];
 
-export const PRESETS = {
-  "start fresh": {},
-  "clean": { font: "system", size: "17px", leading: "1.7", width: "620px", titleWeight: "700", titleSize: "1.5em", date: "faded", underline: "hover", tags: "outline", corners: "6px", gap: "3em", divider: "line" },
-  "notebook": { font: "comic", size: "18px", leading: "1.7", text: "#3b3355", titleSize: "1.5em", titleColor: "#ff7eb6", date: "badge", tags: "filled", tagColor: "#ffe66d", corners: "18px", frame: "thick", card: "#ffffff", cardEdge: "both", gap: "3em", accent: "#7ec8ff" },
-  "newspaper": { font: "times", size: "18px", leading: "1.5", align: "justify", titleFont: "serif", titleSize: "2em", titleWeight: "900", titleAlign: "center", date: "italic", underline: "always", corners: "0", frame: "thin", divider: "dots", gap: "3em" },
-  "typewriter": { font: "mono", size: "15px", leading: "1.7", width: "620px", titleStyle: "lower", titleWeight: "400", titleSize: "1.2em", date: "faded", tags: "square", underline: "always", corners: "0", frame: "thin", divider: "dashed", gap: "3em" },
-  "night": { font: "sans", size: "17px", leading: "1.6", text: "#e6e3f2", titleStyle: "upper", titleWeight: "900", titleColor: "#b6ff00", link: "#b6ff00", underline: "hover", date: "faded", tags: "outline", tagColor: "#8a5cff", frame: "shadow", corners: "6px", divider: "line", gap: "3em", accent: "#8a5cff", siteBg: "#07060c", siteText: "#e6e3f2", siteFont: "sans" },
+// The one built-in look: archizzl.com's style guide (archizzl.github.io/STYLE.md). Calibri /
+// Atkinson Hyperlegible at 20px, italic non-bold titles, browser-blue links underlined on hover,
+// muted dates and #tags, hairline frames, no shadows or cards. Every other starting point is another
+// blog's own saved look (see the style tab).
+export const DEFAULT_LOOK = {
+  font: "archizzl",
+  size: "20px",
+  titleSize: "2em",
+  titleWeight: "400",
+  titleStyle: "italic",
+  date: "faded",
+  link: "#0000ee",
+  underline: "hover",
+  corners: "0",
+  frame: "none",
+  accent: "#000000",
+  siteBg: "#ffffff",
+  siteText: "#000000",
+  siteFont: "archizzl",
 };
+
+// A look as stored on KMP: only known settings, each with an allowed value.
+export function cleanLook(input) {
+  const out = {};
+  if (!input || typeof input !== "object") return out;
+  for (const c of [...CONTROLS, ...SITE_CONTROLS]) {
+    const v = input[c.key];
+    if (v === undefined || v === "") continue;
+    if (c.type === "select" ? Object.hasOwn(c.options, v) : /^#[0-9a-f]{6}$/i.test(v)) out[c.key] = String(v);
+  }
+  return out;
+}
 
 // A preset can set the preview's stand-in page too (keys starting with "site").
 export function cssFrom(s) {
@@ -86,11 +112,11 @@ export function cssFrom(s) {
     rules.get(sel).push(`${prop}: ${value};`);
   };
 
-  // writing
-  if (s.font) add(".kmp-post", "font-family", FONT_STACKS[s.font]);
-  if (s.size) add(".kmp-post", "font-size", s.size);
-  if (s.leading) add(".kmp-post", "line-height", s.leading);
-  if (s.text) add(".kmp-post", "color", s.text);
+  // writing: set on the whole embed, so tag buttons, headings and tags match the posts' font
+  if (s.font) add(".kmp-embed", "font-family", FONT_STACKS[s.font]);
+  if (s.size) add(".kmp-embed", "font-size", s.size);
+  if (s.leading) add(".kmp-embed", "line-height", s.leading);
+  if (s.text) add(".kmp-embed", "color", s.text);
   if (s.width) { add(".kmp-post", "max-width", s.width); add(".kmp-post", "margin-left", "auto"); add(".kmp-post", "margin-right", "auto"); }
   if (s.align) add(".kmp-body", "text-align", s.align);
 
@@ -179,4 +205,4 @@ export function cssFrom(s) {
   return [...rules].map(([sel, props]) => `${sel} {\n  ${props.join("\n  ")}\n}`).join("\n\n");
 }
 
-export const siteFontStack = key => FONT_STACKS[key] || FONT_STACKS.serif;
+export const siteFontStack = key => FONT_STACKS[key] || FONT_STACKS.archizzl;

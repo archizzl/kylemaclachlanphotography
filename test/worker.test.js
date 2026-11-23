@@ -571,3 +571,25 @@ test("blog pages: /<blog>, #tag feeds, single posts, and tidy 404s", async () =>
   assert.equal(byName.status, 301);
   assert.equal(byName.headers.get("location"), `${ORIGIN}/tagger?tag=work`);
 });
+
+test("looks: saved per blog, cleaned, and offered to other blogs (not their own)", async () => {
+  await archie("/admin/users", { method: "POST", form: { username: "looker", display_name: "Looker", password: "looker-password-1" } });
+  await archie("/admin/users", { method: "POST", form: { username: "borrower", password: "borrower-password-1" } });
+  const a = browser("19.0.0.1");
+  await a("/login", { method: "POST", form: { username: "looker", password: "looker-password-1" } });
+  const b = browser("19.0.0.2");
+  await b("/login", { method: "POST", form: { username: "borrower", password: "borrower-password-1" } });
+
+  assert.equal((await (await a("/api/me")).json()).look, null); // nothing saved yet
+  const saved = (await (await a("/api/look", { method: "PUT", body: { look: { font: "comic", titleColor: "#ff7eb6", size: "huge", hack: "<script>" } } })).json()).look;
+  assert.deepEqual(saved, { font: "comic", titleColor: "#ff7eb6" });
+  assert.deepEqual((await (await a("/api/me")).json()).look, saved);
+
+  const forB = (await (await b("/api/looks")).json()).looks;
+  assert.deepEqual(forB.find(l => l.username === "looker"), { username: "looker", name: "Looker", look: saved });
+  assert.ok(!(await (await a("/api/looks")).json()).looks.some(l => l.username === "looker")); // not your own
+
+  // Clearing it takes the blog off the list.
+  await a("/api/look", { method: "PUT", body: { look: {} } });
+  assert.ok(!(await (await b("/api/looks")).json()).looks.some(l => l.username === "looker"));
+});

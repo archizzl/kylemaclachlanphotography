@@ -43,3 +43,7 @@ test("orders: newest, oldest, then number and text fields both ways", () => {
   ];
   assert.deepEqual(sortChoices(fields).map(([v]) => v), ["", "date", "no", "-no", "place", "-place"]);
 });
+
+test("a list can be all posts", () => {
+  assert.match(embedCode({ ...base, show: "list", count: "all" }), /data-list="all"/);
+});

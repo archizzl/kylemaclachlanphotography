@@ -106,12 +106,10 @@ export function endAllSessions(env, userId) {
 // ---- agent keys ----
 // "Authorization: Bearer kmp_…" lets an agent use the dashboard API as the friend who made the key.
 
-export const MAX_AGENT_KEYS = 10;
-
 export async function createAgentKey(env, userId, label) {
   const token = `kmp_${b64(crypto.getRandomValues(new Uint8Array(32)))}`;
   await env.DB.prepare("INSERT INTO agent_keys (user_id, token_hash, label, created_at) VALUES (?, ?, ?, ?)")
-    .bind(userId, await sha256(token), String(label || "").replace(/\s+/g, " ").trim().slice(0, 60), new Date().toISOString())
+    .bind(userId, await sha256(token), String(label || "").replace(/\s+/g, " ").trim().slice(0, 200), new Date().toISOString())
     .run();
   return token;
 }

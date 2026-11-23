@@ -11,10 +11,10 @@
 // A post's values: { [key]: ["tender", "hopeful"] | 12 | "the 14 bus stop" }
 
 export const KINDS = ["tags", "number", "text"];
-export const MAX_FIELDS = 10;
-const MAX_CHOICES = 50;
-const MAX_OPEN_CHOICES = 300; // open tag fields grow as people write
-const MAX_TAGS_PER_POST = 20;
+// No caps on how many fields, tags or tags per post. The only limits are lengths that keep one
+// value on one line: a name or tag up to 100 characters, a text value up to 2,000.
+const NAME_MAX = 100;
+const TEXT_MAX = 2000;
 const RESERVED = new Set(["date", "title", "slug", "id", "body", "html", "url"]);
 
 const oneLine = (v, max) => String(v ?? "").replace(/\s+/g, " ").trim().slice(0, max);
@@ -42,12 +42,11 @@ export function parseJson(text, fallback) {
 // Returns [definitions, problem]. `previous` keeps existing keys stable when fields are renamed.
 export function cleanFieldDefs(input, previous = []) {
   if (!Array.isArray(input)) return [null, "Something was wrong with the fields. Reload and try again."];
-  if (input.length > MAX_FIELDS) return [null, `Blogs can have up to ${MAX_FIELDS} post fields.`];
   const known = new Set(previous.map(f => f.key));
   const used = new Set();
   const out = [];
   for (const raw of input) {
-    const name = oneLine(raw?.name, 40);
+    const name = oneLine(raw?.name, NAME_MAX);
     if (!name) return [null, "Every field needs a name."];
     const kind = KINDS.includes(raw?.kind) ? raw.kind : null;
     if (!kind) return [null, `Pick what kind of field "${name}" is.`];
@@ -62,13 +61,11 @@ export function cleanFieldDefs(input, previous = []) {
     if (kind === "tags") {
       const choices = [];
       for (const c of Array.isArray(raw.choices) ? raw.choices : String(raw.choices || "").split(",")) {
-        const t = oneLine(c, 40);
+        const t = oneLine(c, NAME_MAX);
         if (t && !choices.some(x => x.toLowerCase() === t.toLowerCase())) choices.push(t);
       }
       const open = Boolean(raw.open);
       if (!choices.length && !open) return [null, `Give "${name}" at least one tag to choose from, or let new tags be typed while writing.`];
-      const max = open ? MAX_OPEN_CHOICES : MAX_CHOICES;
-      if (choices.length > max) return [null, `"${name}" can have up to ${max} tags.`];
       def.choices = choices;
       if (open) def.open = true;
     }
@@ -85,7 +82,7 @@ export function cleanPostFields(defs, input) {
   for (const d of defs) {
     const v = src[d.key];
     if (d.kind === "tags") {
-      const picked = (Array.isArray(v) ? v : String(v ?? "").split(",")).map(x => oneLine(x, 40)).filter(Boolean);
+      const picked = (Array.isArray(v) ? v : String(v ?? "").split(",")).map(x => oneLine(x, NAME_MAX)).filter(Boolean);
       let valid;
       if (d.open) {
         // Any tag goes; a known one keeps its usual spelling. Order is as typed.
@@ -95,7 +92,6 @@ export function cleanPostFields(defs, input) {
           const tag = known || p;
           if (!valid.some(x => x.toLowerCase() === tag.toLowerCase())) valid.push(tag);
         }
-        valid = valid.slice(0, MAX_TAGS_PER_POST);
       } else {
         valid = d.choices.filter(c => picked.some(p => p.toLowerCase() === c.toLowerCase()));
       }
@@ -104,7 +100,7 @@ export function cleanPostFields(defs, input) {
       const n = typeof v === "number" ? v : v === "" || v == null ? NaN : Number(v);
       if (Number.isFinite(n) && Math.abs(n) < 1e12) out[d.key] = n;
     } else {
-      const t = oneLine(v, 200);
+      const t = oneLine(v, TEXT_MAX);
       if (t) out[d.key] = t;
     }
   }
@@ -124,7 +120,8 @@ export function listQuery(defs, params) {
   const byKey = Object.fromEntries(defs.map(d => [d.key, d]));
   const where = [];
   const binds = [];
-  for (const f of params.getAll("filter").slice(0, 5)) {
+  // Cloudflare's database takes at most 100 values per query; a few go to the user and paging.
+  for (const f of params.getAll("filter").slice(0, 90)) {
     const i = f.indexOf(":");
     const d = byKey[f.slice(0, i)];
     if (i < 1 || !d) continue;
@@ -160,7 +157,7 @@ export function growChoices(defs, values) {
     const add = values[d.key].filter(t => !d.choices.some(c => c.toLowerCase() === t.toLowerCase()));
     if (!add.length) return d;
     changed = true;
-    return { ...d, choices: [...d.choices, ...add].slice(0, MAX_OPEN_CHOICES) };
+    return { ...d, choices: [...d.choices, ...add] };
   });
   return changed ? next : null;
 }

@@ -16,21 +16,22 @@ One Cloudflare Worker (`blog-cdn`) on the Reaction Future Institute account, plu
   - It's cached for 60 seconds.
 
 - **Friends** log in at `/login` and use the dashboard at `/dashboard` (`public/app/app.js`):
-  - **posts**: a markdown editor with a live preview, and save draft, publish or unpublish. Add photos with the "insert photo" button, by dragging them onto the editor, or by pasting.
+  - **posts**: a markdown editor with a live preview, and save draft, publish or unpublish. Tags are typed into a box, with matching tags dropping down as you type. Add photos with the "insert photo" button, by dragging them onto the editor, or by pasting.
   - **embed**: an embed-code builder (`public/app/embedkit.js`).
     - Pick latest posts, one post or one photo, then how many, the order, only one tag, filter buttons, headings per tag, and what to show with it.
     - See it live with their real posts (in their style-tab look, if they made one), then copy the code.
     - The embed buttons on the posts page open it with that post chosen.
   - **style**: a playground for how their posts could look on their own site.
-    - Pick a starting look (clean, notebook, newspaper, typewriter, night) or set things one by one: font, sizes, title style, dates, links, tag pills, photo frames, spacing, cards, box colour.
-    - It previews their real posts in a sandboxed page with a stand-in for their site's background, then gives CSS to copy (`public/app/stylekit.js`).
-    - Only changed settings become CSS, so their site's styles fill in the rest. Nothing is saved on KMP; the browser remembers their choices.
+    - It starts from the one built-in look, archizzl.com's style guide (`DEFAULT_LOOK` in `public/app/stylekit.js`). Friends can also start from any other blog's look; there are no other templates.
+    - They can set things one by one: font, sizes, title style, dates, links, tag style, photo frames, spacing, cards, box colour. The writing settings apply to the whole embed, so tags and tag buttons always match the writing font.
+    - Checkboxes choose what the preview shows: latest posts, tag buttons, one post, a photo. It previews their real posts in a sandboxed page with a stand-in for their site's background, then gives CSS to copy.
+    - Each blog's look is saved on KMP (`users.look_json`, `PUT /api/look`, `GET /api/looks`) so other blogs can start from it. It never changes anyone's site: the CSS is still copy-paste.
   - **files**: drag-and-drop upload, copy link and delete. Photos also get **describe** (alt text and an optional caption) and **embed code** (a live embed, or a plain `<img>` for sites that block scripts). You can also import a `.md` or `.txt` file as a draft post.
   - **settings**:
     - blog name, site address, and an optional post address pattern (used for feed links);
     - **post fields** and **agent keys** (both below);
     - change password.
-- **Post fields** (`src/fields.js`): each blog designs its own, up to 10.
+- **Post fields** (`src/fields.js`): each blog designs its own, as many as they like (no caps on fields, tags or tags per post).
   - Kinds: `tags` (picked from a list, e.g. emotions; or "open", so any tag can be typed while writing), `number` (can count up by itself), and `text` (e.g. where it was written).
   - Values show under each post's title in embeds and on the front page, and tags become RSS categories.
   - Lists can use them: `?filter=<key>:<value>` and `?sort=<key>` in the JSON API, and `data-filter`, `data-sort`, `data-group` and `data-menu` in embeds.
@@ -149,3 +150,14 @@ npx wrangler d1 export blog-cdn --remote --output backup.sql
 ```
 
 R2 files can be copied out with `npx wrangler r2 object get blog-cdn-files/<key>`, or with any S3 tool.
+
+## limits that are on purpose
+
+Everything else is uncapped. These stay because each is tied to something real:
+- **Posts up to 200,000 characters.** A post and its HTML share one D1 row, and D1 caps a row at 2 MB.
+- **Uploads up to 25 MB.** The Worker holds an upload in its 128 MB of memory while checking it.
+- **About 90 filters at once.** D1 takes 100 bound values per query.
+- **50 full posts (or 1000 brief ones) per JSON request.** Lists page through with `offset`, and `data-list="all"` does that by itself.
+- **Passwords 8–200 characters, 3 wrong tries per account, 10 per IP per 15 minutes, 30-day sessions.** For security.
+- **Usernames up to 30 characters, slugs up to 80.** They're part of URLs; long titles still get a shortened slug.
+- **Photos shrunk to 2400px in the browser.** A quality-versus-storage choice.

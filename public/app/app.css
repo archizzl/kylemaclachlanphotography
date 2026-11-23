@@ -206,3 +206,26 @@ textarea.cssout { width: 100%; min-height: 260px; font-size: 14px; }
 .embedder .style-controls label.check { justify-content: flex-start; }
 .embedder .style-controls input:not([type=checkbox]) { width: 170px; font-size: 15px; display: inline-block; margin: 0; }
 .embedder #stage { height: 70vh; }
+
+/* tag boxes in the post editor */
+.taginput { position: relative; flex: 1; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; min-height: 32px;
+  border: 1px solid #888; border-radius: 3px; padding: 3px 6px; background: #fff; cursor: text; }
+.taginput:focus-within { outline: 2px solid #00e; outline-offset: 1px; }
+.taginput .chosen { display: contents; }
+.taginput .chip { display: inline-flex; align-items: center; gap: 2px; font-size: 16px; color: #333; }
+.taginput .chip::before { content: "#"; color: #888; }
+.taginput .chip button { border: 0; background: none; color: #888; font-size: 16px; padding: 0 4px 0 2px; cursor: pointer; }
+.taginput .chip button:hover { color: #b53a1a; transform: none; opacity: 1; }
+.taginput .tagtyper { flex: 1; min-width: 9em; border: 0; outline: 0; padding: 2px 0; font-size: 16px; width: auto; display: inline-block; margin: 0; }
+.taginput .suggest { position: absolute; left: -1px; right: -1px; top: 100%; z-index: 10; list-style: none; margin: 2px 0 0; padding: 4px 0;
+  background: #fff; border: 1px solid #000; border-radius: 3px; max-height: 240px; overflow-y: auto; font-size: 16px; }
+.taginput .suggest li { padding: 3px 10px; cursor: pointer; }
+.taginput .suggest li::before { content: "#"; color: #888; }
+.taginput .suggest li.new::before, .taginput .suggest li.none::before { content: ""; }
+.taginput .suggest li.on, .taginput .suggest li[data-i]:hover { background: #efefef; }
+.taginput .suggest li.new { color: #00e; }
+.taginput .suggest li.none { color: #888; cursor: default; }
+
+.style-preview .showwhat { border: 1px solid #ddd; border-radius: 3px; padding: 2px 12px 6px; margin: 0; display: flex; flex-wrap: wrap; gap: 2px 18px; }
+.style-preview .showwhat legend { color: #666; font-size: 15px; padding: 0 4px; }
+.style-preview .showwhat label.check { font-size: 16px; margin: 4px 0; }

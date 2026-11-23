@@ -2,7 +2,7 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { CONTROLS, PRESETS, SITE_CONTROLS, cssFrom } from "../public/app/stylekit.js";
+import { CONTROLS, DEFAULT_LOOK, SITE_CONTROLS, cleanLook, cssFrom } from "../public/app/stylekit.js";
 
 test("nothing set means no css at all", () => {
   assert.equal(cssFrom({}), "");
@@ -11,7 +11,7 @@ test("nothing set means no css at all", () => {
 
 test("each setting becomes plain class rules, which beat the embed's defaults", () => {
   const css = cssFrom({ font: "mono", size: "17px", titleColor: "#ff0000", date: "hidden", tags: "filled", tagColor: "#ffee00", corners: "6px" });
-  assert.match(css, /\.kmp-post \{\n  font-family: ui-monospace[^;]*;\n  font-size: 17px;\n\}/);
+  assert.match(css, /\.kmp-embed \{\n  font-family: ui-monospace[^;]*;\n  font-size: 17px;\n\}/); // the whole embed, tags included
   assert.match(css, /\.kmp-title \{\n  color: #ff0000;\n\}/);
   assert.match(css, /\.kmp-title a \{\n  color: inherit;/);
   assert.match(css, /\.kmp-date \{\n  display: none;\n\}/);
@@ -26,7 +26,7 @@ test("the preview-only site settings never reach the css", () => {
 });
 
 test("every preset and every option produces valid-looking css", () => {
-  for (const [name, preset] of Object.entries(PRESETS)) {
+  for (const [name, preset] of Object.entries({ default: DEFAULT_LOOK })) {
     const css = cssFrom(preset);
     assert.equal((css.match(/\{/g) || []).length, (css.match(/\}/g) || []).length, name);
     assert.ok(!/undefined|NaN/.test(css), name);
@@ -41,4 +41,18 @@ test("tags default to archizzl-style #tags; pill styles switch that off", () => 
   assert.equal(cssFrom({ tags: "" }), "");
   assert.match(cssFrom({ tags: "filled" }), /\.kmp-tag::before, \.kmp-menu button::before \{\n  content: none;/);
   assert.match(cssFrom({ tagColor: "#ff0000" }), /\.kmp-tag, \.kmp-menu button \{\n  color: #ff0000;\n  opacity: 1;/);
+});
+
+test("the one default look is archizzl's style guide", () => {
+  const css = cssFrom(DEFAULT_LOOK);
+  assert.match(css, /\.kmp-embed \{\n  font-family: Calibri, "Atkinson Hyperlegible", Helvetica, sans-serif;\n  font-size: 20px;/);
+  assert.match(css, /\.kmp-title \{[^}]*font-weight: 400;[^}]*font-style: italic;/);
+  assert.match(css, /\.kmp-body a \{\n  color: #0000ee;\n  text-decoration: none;/);
+  assert.match(css, /\.kmp-body a:hover \{\n  text-decoration: underline;/);
+});
+
+test("saved looks only keep known settings with allowed values", () => {
+  assert.deepEqual(cleanLook({ font: "comic", size: "999px", text: "#ABCDEF", link: "red", evil: "x", siteBg: "#000000", tags: "" }), { font: "comic", text: "#ABCDEF", siteBg: "#000000" });
+  assert.deepEqual(cleanLook(null), {});
+  assert.deepEqual(cleanLook(DEFAULT_LOOK), DEFAULT_LOOK);
 });

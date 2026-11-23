@@ -27,6 +27,8 @@ const BLOGS = [
     username: "smallhours",
     password: "demo-smallhours-1",
     settings: { display_name: "small hours", site_url: `${DEMO}/poetry/`, post_url_pattern: `${DEMO}/poetry/?poem={slug}` },
+    // Its look in the style tab (what other blogs can start from).
+    look: { font: "comic", size: "18px", leading: "1.7", text: "#3b3355", titleSize: "1.5em", titleColor: "#ff7eb6", date: "badge", tags: "filled", tagColor: "#ffe66d", corners: "18px", frame: "thick", card: "#ffffff", cardEdge: "both", gap: "3em", accent: "#7ec8ff", siteBg: "#fffbea", siteText: "#3b3355", siteFont: "comic" },
     // This poet tags poems by emotion, numbers them, and notes where each was written.
     fields: [
       { name: "emotion", kind: "tags", choices: ["tender", "restless", "lonely", "hopeful", "giddy"] },
@@ -38,6 +40,7 @@ const BLOGS = [
     username: "xenolab",
     password: "demo-xenolab-1",
     settings: { display_name: "synthetic tenderness", site_url: `${DEMO}/xeno/`, post_url_pattern: `${DEMO}/xeno/?post={slug}` },
+    look: { font: "sans", size: "17px", leading: "1.6", text: "#e6e3f2", titleStyle: "upper", titleWeight: "900", titleColor: "#b6ff00", link: "#b6ff00", underline: "hover", date: "faded", tags: "outline", tagColor: "#8a5cff", frame: "shadow", corners: "6px", divider: "line", gap: "3em", accent: "#8a5cff", siteBg: "#07060c", siteText: "#e6e3f2", siteFont: "sans" },
   },
 ];
 
@@ -332,6 +335,7 @@ for (const blog of BLOGS) {
   if (res.status !== 303) throw new Error(`Couldn't log in as ${blog.username}`);
   await me("/api/me", { method: "PUT", json: blog.settings });
   if (blog.fields) await me("/api/fields", { method: "PUT", json: { fields: blog.fields } });
+  if (blog.look) await me("/api/look", { method: "PUT", json: { look: blog.look } });
 
   const existing = (await (await me("/api/posts")).json()).posts;
   if (existing.length) {
