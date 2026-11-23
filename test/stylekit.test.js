@@ -60,7 +60,8 @@ test("saved looks only keep known settings with allowed values", () => {
 test("a look can be limited to one blog's posts", () => {
   const scope = '.kmp-embed[data-blog="maya"]';
   const css = scopedCss({ font: "mono", tags: "filled", siteBg: "#101010", evil: "}</style><script>" }, scope);
-  assert.match(css, /^\.kmp-embed\[data-blog="maya"\] \{\n  background: #101010;/);
+  assert.match(css, /^\.kmp-embed\[data-blog="maya"\] \{\n  font-family: ui-monospace/);
+  assert.ok(!css.includes("#101010")); // preview-only site colours never reach KMP's pages
   // Every rule starts with the scope, including both halves of combined selectors.
   for (const line of css.split("\n").filter(l => l.endsWith(" {"))) {
     for (const sel of line.slice(0, -2).split(", ")) assert.ok(sel.startsWith(scope), sel);

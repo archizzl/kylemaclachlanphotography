@@ -619,7 +619,8 @@ test("KMP's own pages show each post in its blog's saved look; blogs without one
   const reader = browser("21.0.0.3");
   for (const path of ["/?mix", "/styled?mix", "/styled/styled-post?mix"]) {
     const page = await (await reader(path)).text();
-    assert.match(page, /<style id="looks">[\s\S]*\.kmp-embed\[data-blog="styled"\] \{\n  background: #fffbea;/, path);
+    assert.match(page, /<style id="looks">[\s\S]*\.kmp-embed\[data-blog="styled"\] \{\n  font-family: "Comic Sans MS"/, path);
+    assert.ok(!page.includes("background: #fffbea"), path); // the site stand-in isn't used here: no box behind posts
     assert.match(page, /\.kmp-embed\[data-blog="styled"\] \.kmp-title \{\n  color: #ff7eb6;/, path);
     assert.match(page, /<div class="kmp-embed styled" data-blog="styled">/, path);
   }
