@@ -101,7 +101,7 @@ function frame(active, inner) {
   // ↗ goes to the friend's own site if they've set one, otherwise their page here.
   const outside = me?.site_url || `/${username}`;
   app.innerHTML = `<header class="top"><h1>${esc(me?.display_name || username)}<a class="out" href="${esc(outside)}" target="_blank" rel="noopener" title="${me?.site_url ? "your site" : "your blog on kylemaclachlanphotography.org"}">↗</a></h1>
-    <nav>${tab("posts", "posts")}${tab("files", "files")}${tab("embed", "embed")}${tab("style", "style")}${tab("settings", "settings")}<a href="/logout">log out</a></nav></header>
+    <nav>${tab("posts", "posts")}${tab("files", "files")}${tab("embed", "embed")}${tab("style", "style")}${tab("settings", "settings")}<a href="/" title="the front page with every blog (you stay logged in)">front page</a><a href="/logout">log out</a></nav></header>
     <main>${inner}</main>`;
 }
 
