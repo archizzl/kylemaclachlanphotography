@@ -6,7 +6,7 @@ import assert from "node:assert/strict";
 import { readFileSync, readdirSync } from "node:fs";
 import { getPlatformProxy } from "wrangler";
 import worker from "../src/worker.js";
-import previews, { cleanPreviewName, nameFromHost, suggestedPreviewName } from "../src/preview.js";
+import previews, { cleanPreviewName, nameFromHost, subdomainUrl, suggestedPreviewName } from "../src/preview.js";
 
 const ORIGIN = "https://kylemaclachlanphotography.org";
 const CDN = "https://cdn.kylemaclachlanphotography.org";
@@ -923,4 +923,25 @@ test("link previews: KMP's pages share the site photo; preview sites don't", asy
   assert.match(await (await reader("/signup")).text(), /<meta property="og:image" content="[^"]+\/og\.jpg">/);
   const preview = await previews.fetch(new Request("https://hider.kylemaclachlanphotography.org/?og"), { ...env, SITE_ORIGIN: ORIGIN });
   assert.ok(!(await preview.text()).includes("og:image"));
+});
+
+test("↗ goes to a blog's own site, else its site on this domain", async () => {
+  await archie("/admin/users", { method: "POST", form: { username: "arrow", display_name: "Arrow", password: "arrow-password-1" } });
+  const a = browser("26.0.0.1");
+  await a("/login", { method: "POST", form: { username: "arrow", password: "arrow-password-1" } });
+  await a("/api/posts", { method: "POST", body: { title: "Point", date: "2034-01-01", published: 1 } });
+  const arrowOf = async () => (await (await a(`/?arrow${Math.random()}`)).text()).match(/href="\/arrow"[^>]*>Arrow<\/a>(&nbsp;<a class="site" href="([^"]+)")?/)?.[2] || null;
+
+  assert.equal(await arrowOf(), null);
+  assert.equal((await (await a("/api/me")).json()).subdomain, null);
+  // A preview site gives it one.
+  const on = await (await a("/api/preview", { method: "PUT", body: { on: true, name: "arrowsite" } })).json();
+  assert.equal(on.subdomain, "https://arrowsite.kylemaclachlanphotography.org");
+  assert.equal(await arrowOf(), "https://arrowsite.kylemaclachlanphotography.org");
+  // Their own site wins.
+  await a("/api/me", { method: "PUT", body: { display_name: "Arrow", site_url: "https://arrow.example", post_url_pattern: "" } });
+  assert.equal(await arrowOf(), "https://arrow.example/");
+  // A hand-made site counts too (bruteforce has one).
+  const bf = (await env.DB.prepare("SELECT username, preview_host FROM users WHERE username = 'bruteforce'").first());
+  assert.equal(subdomainUrl(env, bf), "https://bruteforce.kylemaclachlanphotography.org");
 });

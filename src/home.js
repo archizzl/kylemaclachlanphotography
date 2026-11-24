@@ -18,7 +18,7 @@ export const HOME_PAGE_SIZE = 20;
 export async function loadHome(env, { blog = "", page = 1, tag = "", slug = "" } = {}) {
   const offset = (page - 1) * HOME_PAGE_SIZE;
   const { results: blogs } = await env.DB.prepare(
-    `SELECT u.username, u.display_name, u.site_url,
+    `SELECT u.username, u.display_name, u.site_url, u.preview_host,
        (SELECT COUNT(*) FROM posts p WHERE p.user_id = u.id AND p.published = 1) AS posts,
        (SELECT COUNT(*) FROM files f WHERE f.user_id = u.id AND f.deleted_at IS NULL AND f.content_type LIKE 'image/%') AS photos
      FROM users u WHERE u.disabled = 0

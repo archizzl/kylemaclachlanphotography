@@ -108,9 +108,9 @@ function showSnippet(title, choices, extra = "") {
 function frame(active, inner) {
   const tab = (id, label) => `<a href="#${id}" class="${active === id ? "on" : ""}">${label}</a>`;
   document.querySelectorAll("dialog").forEach(d => d.remove());
-  // ↗ goes to the friend's own site if they've set one, then their preview site, then their page here.
-  const outside = me?.site_url || me?.preview || `/${username}`;
-  const outsideTitle = me?.site_url ? "your site" : me?.preview ? "your preview site" : "your blog on kylemaclachlanphotography.org";
+  // ↗ goes to the friend's own site if they've set one, then their site on this domain (hand-made or preview), then their page here.
+  const outside = me?.site_url || me?.subdomain || `/${username}`;
+  const outsideTitle = me?.site_url || me?.subdomain ? "your site" : "your blog on kylemaclachlanphotography.org";
   app.innerHTML = `<header class="top"><h1>${esc(me?.display_name || username)}<a class="out" href="${esc(outside)}" target="_blank" rel="noopener" title="${outsideTitle}">↗</a></h1>
     <nav>${tab("posts", "posts")}${tab("files", "files")}${tab("embed", "embed")}${tab("style", "style")}${tab("settings", "settings")}<a href="/" title="the front page with every blog (you stay logged in)">front page</a><a href="/logout">log out</a></nav></header>
     <main>${inner}</main>`;

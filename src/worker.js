@@ -30,7 +30,7 @@ import { measuredByMonth, syncR2Usage, syncStatus } from "./r2usage.js";
 import { cleanFieldDefs, cleanPostFields, growChoices, hiddenClause, listQuery, parseJson } from "./fields.js";
 import { adminLoginPage, adminPage, dashboardPage, loginPage, signupPage, signupThanksPage, simplePage } from "./pages.js";
 import { acceptSignup, denySignup, pendingSignups, submitSignup, waitingFor } from "./signup.js";
-import { cleanPreviewName, previewDomain, previewProblem, previewUrl, suggestedPreviewName } from "./preview.js";
+import { cleanPreviewName, previewDomain, previewProblem, previewUrl, subdomainUrl, suggestedPreviewName } from "./preview.js";
 import { html, json, now, readJson, redirect } from "./util.js";
 
 const PUBLIC_CACHE_SECONDS = 60;
@@ -159,6 +159,8 @@ async function frontPage(env, url, { blog = "", slug = "" }) {
   if (slug && !data.posts.length) {
     return html(simplePage("not found", `that post isn't here. <a href="/${blog}">see the rest of the blog</a>.`), 404);
   }
+  // ↗ goes to a blog's own site, or else its site on this domain (hand-made or preview).
+  data.blogs = data.blogs.map(b => ({ ...b, site_url: b.site_url || subdomainUrl(env, b) || "" }));
   return html(homePage(data, { cdnBase: cdnBase(env), origin: siteOrigin(env, url) }), 200, {
     "cache-control": `public, max-age=${PUBLIC_CACHE_SECONDS}`,
     "x-frame-options": "DENY",
@@ -373,6 +375,7 @@ async function api(path, method, request, env, user, url) {
       cdn: `${base}/${user.username}/`,
       // The preview site's address if it's on; its name (or the one it's offered); what follows the name.
       preview: previewUrl(env, user.preview_host),
+      subdomain: subdomainUrl(env, user),
       previewName: user.preview_host || suggestedPreviewName(user),
       previewDomain: previewDomain(env),
       feeds: { rss: `${siteOrigin(env, url)}/${user.username}/feed.xml`, json: `${siteOrigin(env, url)}/${user.username}/feed.json` },
@@ -405,7 +408,12 @@ async function api(path, method, request, env, user, url) {
       if (/UNIQUE/i.test(String(err))) return json({ error: "Another blog just took that address. Try a different one." }, 400);
       throw err;
     }
-    return json({ preview: previewUrl(env, name), previewName: name || suggestedPreviewName(user), previewDomain: previewDomain(env) });
+    return json({
+      preview: previewUrl(env, name),
+      subdomain: subdomainUrl(env, { ...user, preview_host: name }),
+      previewName: name || suggestedPreviewName(user),
+      previewDomain: previewDomain(env),
+    });
   }
   // What this blog costs, by month and all time.
   if (path === "/api/usage" && method === "GET") {

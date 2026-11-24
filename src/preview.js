@@ -65,6 +65,14 @@ export function previewUrl(env, name) {
 
 const previewBase = env => String(env.PREVIEW_BASE || "https://{name}.kylemaclachlanphotography.org");
 
+// A blog's own address on this domain, if it has one: its hand-made site, else its preview site.
+// The front page's ↗ and the dashboard's use it when the blog hasn't set its own site.
+export function subdomainUrl(env, user) {
+  const made = Object.keys(SITES).find(k => SITES[k].username === user.username);
+  if (made) return previewUrl(env, made);
+  return user.preview_host ? previewUrl(env, user.preview_host) : null;
+}
+
 // Which preview a hostname asks for, or null.
 export function nameFromHost(env, hostname) {
   const host = new URL(previewBase(env).replace("{name}", "x")).hostname.slice(2); // "kylemaclachlanphotography.org"
