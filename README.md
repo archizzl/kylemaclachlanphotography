@@ -14,6 +14,7 @@ One Cloudflare Worker (`blog-cdn`) on the Reaction Future Institute account, plu
   - The middle is one feed of every published post from every blog, newest first, 20 per page.
   - Along the bottom is a row of every uploaded photo. It's pinned to the window on desktop and sits at the end of the page on phones. Clicking a photo opens it bigger.
   - Above the title "kyle maclachlan photography" is a photo of Kyle MacLachlan, changing every 4 seconds, from the ones accepted sign-ups chose (below). There's none until the first sign-up is accepted.
+  - Link previews (Open Graph): the front page, blog pages, post pages and `/signup` share `public/og.jpg` (1200×1236) with the page's title. Preview sites don't.
   - It's cached for 60 seconds.
 
 - **Sign-ups** (`/signup`, `src/signup.js`, `public/app/signup.js`): anyone can ask for a blog with their first name, a blog name, a password and their favorite photo of Kyle MacLachlan.

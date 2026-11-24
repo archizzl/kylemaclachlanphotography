@@ -93,7 +93,7 @@ async function route(request, env, ctx) {
   if (path === "/login" && method === "POST") return login(request, env);
 
   // ---- asking for a blog ----
-  if (path === "/signup" && method === "GET") return html(signupPage());
+  if (path === "/signup" && method === "GET") return html(signupPage({ origin: siteOrigin(env, url) }));
   if (path === "/signup" && method === "POST") {
     // signup.js asks for JSON; a plain form post (no JavaScript) gets a page back.
     const wantsJson = (request.headers.get("accept") || "").includes("application/json");
@@ -159,7 +159,7 @@ async function frontPage(env, url, { blog = "", slug = "" }) {
   if (slug && !data.posts.length) {
     return html(simplePage("not found", `that post isn't here. <a href="/${blog}">see the rest of the blog</a>.`), 404);
   }
-  return html(homePage(data, { cdnBase: cdnBase(env) }), 200, {
+  return html(homePage(data, { cdnBase: cdnBase(env), origin: siteOrigin(env, url) }), 200, {
     "cache-control": `public, max-age=${PUBLIC_CACHE_SECONDS}`,
     "x-frame-options": "DENY",
     // For agents: where the setup guide is (people never see this).

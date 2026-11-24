@@ -106,7 +106,18 @@ function kyleHeader(kyle, cdnBase) {
   return `<img class="kyle" src="${e(first.src)}" alt="${e(first.alt)}"${first.w ? ` width="${first.w}" height="${first.h}"` : ""} data-kyle="${e(JSON.stringify(list))}">`;
 }
 
-export function homePage({ blogs, only, page, tag, slug, posts, more, photos, kyle = [] }, { cdnBase, site = null }) {
+// Link previews (Open Graph) for KMP's own pages: the site's photo (public/og.jpg) and the page's title.
+export function ogTags(origin, title) {
+  return `<meta property="og:type" content="website">
+<meta property="og:site_name" content="kyle maclachlan photography">
+<meta property="og:title" content="${e(title)}">
+<meta property="og:image" content="${e(`${origin}/og.jpg`)}">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="1236">
+<meta name="twitter:card" content="summary_large_image">`;
+}
+
+export function homePage({ blogs, only, page, tag, slug, posts, more, photos, kyle = [] }, { cdnBase, site = null, origin = "" }) {
   const here = blogs.find(b => b.username === only) || (only ? { username: only, display_name: posts[0]?.display_name || "" } : null);
   // On a preview site the blog lives at / and its posts at /<post>; its stylesheet and script still
   // come from the main site.
@@ -203,7 +214,8 @@ ${
     ? `<title>${single ? `${e(posts[0].title)} · ` : tag ? `#${e(tag)} · ` : ""}${e(name(here))}</title>
 <meta name="robots" content="noindex">`
     : `<title>${pageTitle}kyle maclachlan photography</title>
-<meta name="description" content="writing and photos from a few friends' blogs, all in one place.">`
+<meta name="description" content="writing and photos from a few friends' blogs, all in one place.">
+${ogTags(origin, single ? posts[0].title : here ? name(here) : "kyle maclachlan photography")}`
 }
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&display=swap">

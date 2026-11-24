@@ -911,3 +911,16 @@ test("sign-ups: a request waits for archie, who accepts (account + front page ph
   for (let i = 0; i < 3; i++) await busy("/signup", { method: "POST", raw: form({ first_name: `F${i}`, blog_name: `Blog ${i}`, password: "password-123" }) });
   assert.equal((await busy("/signup", { method: "POST", raw: form({ first_name: "F4", blog_name: "Blog 4", password: "password-123" }) })).status, 429);
 });
+
+test("link previews: KMP's pages share the site photo; preview sites don't", async () => {
+  const reader = browser("25.0.0.1");
+  const front = await (await reader("/?og")).text();
+  assert.match(front, /<meta property="og:image" content="https?:\/\/[^"]+\/og\.jpg">/);
+  assert.match(front, /<meta property="og:title" content="kyle maclachlan photography">/);
+  assert.match(front, /<meta name="twitter:card" content="summary_large_image">/);
+  assert.match(await (await reader("/tagger?og")).text(), /<meta property="og:title" content="Tag Blog!">/);
+  assert.match(await (await reader("/tagger/at-work?og")).text(), /<meta property="og:title" content="At Work">/);
+  assert.match(await (await reader("/signup")).text(), /<meta property="og:image" content="[^"]+\/og\.jpg">/);
+  const preview = await previews.fetch(new Request("https://hider.kylemaclachlanphotography.org/?og"), { ...env, SITE_ORIGIN: ORIGIN });
+  assert.ok(!(await preview.text()).includes("og:image"));
+});

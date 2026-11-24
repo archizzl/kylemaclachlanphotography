@@ -1,8 +1,9 @@
 // Server-built pages: the two login forms, sign-up, Archie's admin page, the dashboard shell and errors.
 
 import { escapeHtml as e, money } from "./util.js";
+import { ogTags } from "./home.js";
 
-function shell(title, body, { bodyClass = "", scripts = "" } = {}) {
+function shell(title, body, { bodyClass = "", scripts = "", head = "" } = {}) {
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -13,6 +14,7 @@ function shell(title, body, { bodyClass = "", scripts = "" } = {}) {
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&display=swap">
 <link rel="stylesheet" href="/app/app.css">
+${head}
 </head>
 <body class="${bodyClass}">
 ${body}
@@ -26,7 +28,7 @@ export function simplePage(title, message) {
 }
 
 // /signup: works without JavaScript; signup.js shrinks the photo first when it can.
-export function signupPage({ message = "", firstName = "", blogName = "" } = {}) {
+export function signupPage({ message = "", firstName = "", blogName = "", origin = "" } = {}) {
   return shell(
     "sign up",
     `<main class="narrow">
@@ -43,7 +45,7 @@ export function signupPage({ message = "", firstName = "", blogName = "" } = {})
   <button type="submit">send</button>
 </form>
 </main>`,
-    { bodyClass: "signup", scripts: `<script src="/app/signup.js" type="module"></script>` }
+    { bodyClass: "signup", scripts: `<script src="/app/signup.js" type="module"></script>`, head: origin ? ogTags(origin, "sign up · kyle maclachlan photography") : "" }
   );
 }
 
