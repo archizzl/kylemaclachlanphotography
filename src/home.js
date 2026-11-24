@@ -171,7 +171,7 @@ export function homePage({ blogs, only, page, tag, slug, posts, more, photos, ky
 <nav class="blogs" aria-label="blogs">
   <h2>blogs</h2>
   <ul>
-    <li><a href="/" class="${only ? "" : "on"}">everything</a></li>
+    <li><a href="/" class="${only ? "" : "on"}">everybody</a></li>
     ${blogs
       .map(
         b => `<li title="${e(name(b))}"><a href="/${e(b.username)}" class="${b.username === only ? "on" : ""}">${e(name(b))}</a>${
