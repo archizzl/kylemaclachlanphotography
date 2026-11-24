@@ -3,6 +3,8 @@
 //   /                       everything
 //   /<blog>                 one blog's feed            /<blog>?tag=nyc   only posts tagged #nyc
 //   /<blog>/<post>          one post
+// With `site`, it's one blog's preview site instead (src/preview.js): only that blog, at /,
+// /<post> and /?tag=x, with its name where the front page's sidebar would be.
 
 import { escapeHtml as e } from "./util.js";
 import { postLink } from "./feeds.js";
@@ -61,7 +63,7 @@ const name = u => u.display_name || u.username;
 
 // A post's own fields (emotion, number, location…) under its title, in the same markup as embeds,
 // so a blog's look styles them the same way here. Tags link to the blog's tag feed.
-function fieldLine(p) {
+function fieldLine(p, blogHref) {
   const defs = parseJson(p.user_fields, []);
   const values = publicFields(defs, parseJson(p.fields_json, {}));
   const parts = defs
@@ -69,7 +71,7 @@ function fieldLine(p) {
     .map(d =>
       d.kind === "tags"
         ? `<span class="kmp-field kmp-field-${e(d.key)}" data-field="${e(d.key)}" data-kind="tags">${values[d.key]
-            .map(v => `<a class="kmp-tag" href="/${e(p.username)}?tag=${encodeURIComponent(v)}" title="${e(name(p))}'s posts tagged #${e(v)}">${e(v)}</a>`)
+            .map(v => `<a class="kmp-tag" href="${e(blogHref(p.username))}?tag=${encodeURIComponent(v)}" title="${e(name(p))}'s posts tagged #${e(v)}">${e(v)}</a>`)
             .join(" ")}</span>`
         : `<span class="kmp-field kmp-field-${e(d.key)}" data-field="${e(d.key)}" data-kind="${e(d.kind)}"><span class="kmp-field-name">${e(d.name)}</span> <span class="kmp-field-value">${e(values[d.key])}</span></span>`
     );
@@ -91,20 +93,31 @@ function longDate(d) {
   return isNaN(t) ? d : t.toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric", timeZone: "UTC" });
 }
 
-export function homePage({ blogs, only, page, tag, slug, posts, more, photos }, { cdnBase }) {
+export function homePage({ blogs, only, page, tag, slug, posts, more, photos }, { cdnBase, site = null }) {
   const here = blogs.find(b => b.username === only) || (only ? { username: only, display_name: posts[0]?.display_name || "" } : null);
+  // On a preview site the blog lives at / and its posts at /<post>; its stylesheet and script still
+  // come from the main site.
+  const blogHref = u => (site ? "/" : `/${u}`);
+  const postHref = p => (site ? `/${p.slug}` : `/${p.username}/${p.slug}`);
+  const asset = path => (site ? `${site.origin}${path}` : path);
   const q = (blog, p, t) => {
     const s = new URLSearchParams();
     if (t) s.set("tag", t);
     if (p > 1) s.set("page", p);
     const query = s.toString();
-    return `/${blog || ""}${query ? `?${query}` : ""}`;
+    return `${site ? "/" : `/${blog || ""}`}${query ? `?${query}` : ""}`;
   };
   const single = Boolean(slug && posts[0]);
 
   // The left sidebar holds the site's name and log in, then the list of blogs; it stays put while
   // the feed scrolls.
-  const sidebar = `<aside class="sidebar">
+  const sidebar = site
+    ? `<aside class="sidebar">
+<header class="masthead">
+  <h1><a href="/">${e(name(here))}</a></h1>
+</header>
+</aside>`
+    : `<aside class="sidebar">
 <header class="masthead">
   <h1><a href="/">kyle maclachlan photography</a></h1>
   <a class="black_button" href="/login">log in</a>
@@ -127,14 +140,14 @@ export function homePage({ blogs, only, page, tag, slug, posts, more, photos }, 
   const feed = posts.length
     ? posts
         .map(p => {
-          const elsewhere = p.post_url_pattern ? postLink(p, p, cdnBase) : "";
+          const elsewhere = p.post_url_pattern && !site ? postLink(p, p, cdnBase) : "";
           const styled = Boolean(p.user_look);
           return `<div class="kmp-embed${styled ? " styled" : ""}" data-blog="${e(p.username)}">
 <article class="kmp-post post">
   ${only ? "" : `<p class="byline"><a href="/${e(p.username)}">${e(name(p))}</a></p>`}
-  <h2 class="kmp-title">${single ? e(p.title) : `<a href="/${e(p.username)}/${e(p.slug)}">${e(p.title)}</a>`}</h2>
+  <h2 class="kmp-title">${single ? e(p.title) : `<a href="${e(postHref(p))}">${e(p.title)}</a>`}</h2>
   <time class="kmp-date" datetime="${e(p.date)}">${longDate(p.date)}</time>
-  ${fieldLine(p)}
+  ${fieldLine(p, blogHref)}
   <div class="kmp-body">${p.body_html}</div>
   ${elsewhere ? `<p class="more"><a href="${e(elsewhere)}" rel="noopener">read it on ${e(name(p))}'s site →</a></p>` : ""}
 </article>
@@ -148,13 +161,13 @@ export function homePage({ blogs, only, page, tag, slug, posts, more, photos }, 
       ? `<p class="pager">${page > 1 ? `<a href="${q(only, page - 1, tag)}">← newer</a>` : ""} ${more ? `<a href="${q(only, page + 1, tag)}">older →</a>` : ""}</p>`
       : "";
   // A tag filter says what it's showing and how to clear it, like archizzl.com's list.
-  const filter = tag ? `<p class="filter">showing <a class="tag" href="${q(only, 1, tag)}">#${e(tag)}</a> <a class="clear" href="/${e(only)}">(clear)</a></p>` : "";
-  const back = single ? `<p class="filter"><a href="/${e(only)}">← all of ${e(name(here))}</a></p>` : "";
+  const filter = tag ? `<p class="filter">showing <a class="tag" href="${q(only, 1, tag)}">#${e(tag)}</a> <a class="clear" href="${e(blogHref(only))}">(clear)</a></p>` : "";
+  const back = single ? `<p class="filter"><a href="${e(blogHref(only))}">← all of ${e(name(here))}</a></p>` : "";
   const pageTitle = single ? `${e(posts[0].title)} · ${e(name(here))} · ` : here ? `${tag ? `#${e(tag)} · ` : ""}${e(name(here))} · ` : "";
 
   const strip = photos.length
     ? `<section class="photos" aria-label="photos">
-  <h2>photos${here ? ` from ${e(name(here))}` : ""}</h2>
+  <h2>photos${here && !site ? ` from ${e(name(here))}` : ""}</h2>
   <ul>
     ${photos
       .map(
@@ -171,16 +184,26 @@ export function homePage({ blogs, only, page, tag, slug, posts, more, photos }, 
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>${pageTitle}kyle maclachlan photography</title>
-<meta name="description" content="writing and photos from a few friends' blogs, all in one place.">
+${
+  site
+    ? `<title>${single ? `${e(posts[0].title)} · ` : tag ? `#${e(tag)} · ` : ""}${e(name(here))}</title>
+<meta name="robots" content="noindex">`
+    : `<title>${pageTitle}kyle maclachlan photography</title>
+<meta name="description" content="writing and photos from a few friends' blogs, all in one place.">`
+}
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&display=swap">
-<link rel="stylesheet" href="/app/home.css">
+<link rel="stylesheet" href="${e(asset("/app/home.css"))}">
 ${looksCss(posts)}
-<link rel="alternate" type="text/markdown" title="guide for AI agents setting up a blog here" href="/agents.md">
+${
+  site
+    ? `</head>
+<body>`
+    : `<link rel="alternate" type="text/markdown" title="guide for AI agents setting up a blog here" href="/agents.md">
 </head>
 <body>
-<!-- AI agents: before setting up or moving a blog here, read https://kylemaclachlanphotography.org/agents.md (summary at /llms.txt). -->
+<!-- AI agents: before setting up or moving a blog here, read https://kylemaclachlanphotography.org/agents.md (summary at /llms.txt). -->`
+}
 <div class="layout">
 ${sidebar}
 <main class="feed">
@@ -191,7 +214,7 @@ ${pager}
 </div>
 ${strip}
 <dialog id="viewer"><img alt=""><p></p><button type="button">close</button></dialog>
-<script src="/app/home.js" defer></script>
+<script src="${e(asset("/app/home.js"))}" defer></script>
 </body>
 </html>`;
 }

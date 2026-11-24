@@ -98,9 +98,10 @@ function showSnippet(title, choices, extra = "") {
 function frame(active, inner) {
   const tab = (id, label) => `<a href="#${id}" class="${active === id ? "on" : ""}">${label}</a>`;
   document.querySelectorAll("dialog").forEach(d => d.remove());
-  // ↗ goes to the friend's own site if they've set one, otherwise their page here.
-  const outside = me?.site_url || `/${username}`;
-  app.innerHTML = `<header class="top"><h1>${esc(me?.display_name || username)}<a class="out" href="${esc(outside)}" target="_blank" rel="noopener" title="${me?.site_url ? "your site" : "your blog on kylemaclachlanphotography.org"}">↗</a></h1>
+  // ↗ goes to the friend's own site if they've set one, then their preview site, then their page here.
+  const outside = me?.site_url || me?.preview || `/${username}`;
+  const outsideTitle = me?.site_url ? "your site" : me?.preview ? "your preview site" : "your blog on kylemaclachlanphotography.org";
+  app.innerHTML = `<header class="top"><h1>${esc(me?.display_name || username)}<a class="out" href="${esc(outside)}" target="_blank" rel="noopener" title="${outsideTitle}">↗</a></h1>
     <nav>${tab("posts", "posts")}${tab("files", "files")}${tab("embed", "embed")}${tab("style", "style")}${tab("settings", "settings")}<a href="/" title="the front page with every blog (you stay logged in)">front page</a><a href="/logout">log out</a></nav></header>
     <main>${inner}</main>`;
 }
@@ -1038,17 +1039,43 @@ function describe(f) {
 
 // ---- settings ----
 
+// Turns the blog's preview site (<blog name>.kylemaclachlanphotography.org) on and off.
+function previewSite() {
+  const box = $("#preview");
+  const bare = u => String(u || "").replace(/^https?:\/\//, "");
+  box.innerHTML = me.preview
+    ? `<p>your blog is up as its own website at <a href="${esc(me.preview)}" target="_blank" rel="noopener">${esc(bare(me.preview))}</a> ↗, in the look you saved in the <a href="#style">style</a> tab.</p>
+      <p class="muted">it follows your blog name: rename the blog and the address changes with it (the old one stops working). search engines don't list it.</p>
+      <button type="button" data-preview="off">turn off preview site</button>`
+    : `<p>try your blog out as its own website before you buy a domain. it shows your posts and photos in the look you saved in the <a href="#style">style</a> tab, at</p>
+      <p><b>${esc(bare(me.previewWouldBe))}</b></p>
+      <p class="muted">it follows your blog name, so rename the blog first if you want a different address. search engines won't list it.</p>
+      <button type="button" data-preview="on">turn on preview site</button>`;
+  box.querySelector("[data-preview]").onclick = async ev => {
+    const on = ev.target.dataset.preview === "on";
+    ev.target.disabled = true;
+    try {
+      Object.assign(me, await api("preview", { method: "PUT", body: { on } }));
+      toast(on ? "preview site is on" : "preview site is off");
+      settingsView();
+    } catch (err) { toast(err.message, true); ev.target.disabled = false; }
+  };
+}
+
 function settingsView() {
   frame(
     "settings",
     `<h2>about you</h2>
     <form id="about" class="stack">
-      <label>blog name <span class="muted">(shown in the sidebar on the front page and as your feed's title)</span> <input name="display_name" value="${esc(me.display_name)}" placeholder="${esc(username)}"></label>
+      <label>blog name <span class="muted">(shown in the sidebar on the front page and as your feed's title${me.preview ? ", and your preview site's address" : ""})</span> <input name="display_name" value="${esc(me.display_name)}" placeholder="${esc(username)}"></label>
       <label>your site <input name="site_url" value="${esc(me.site_url)}" placeholder="https://you.neocities.org"></label>
       <label>post address pattern <span class="muted">(optional) where each post lives on your site, for feed links. include {slug}.</span>
         <input name="post_url_pattern" value="${esc(me.post_url_pattern)}" placeholder="https://you.neocities.org/blog/{slug}"></label>
       <button type="submit">save</button>
     </form>
+
+    <h2>preview site</h2>
+    <div id="preview"></div>
 
     <h2>what your blog costs</h2>
     <div id="costs"><p class="muted">adding it up…</p></div>
@@ -1083,6 +1110,7 @@ function settingsView() {
   fieldsEditor();
   agentKeys();
   costs();
+  previewSite();
   $("#about").onsubmit = async ev => {
     ev.preventDefault();
     const body = Object.fromEntries(new FormData(ev.target));

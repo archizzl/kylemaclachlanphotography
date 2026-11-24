@@ -1,0 +1,32 @@
+{
+  // kmp-previews: each blog's preview site at <blog name>.kylemaclachlanphotography.org, for
+  // blogs that turned one on in settings. Only reads the blog's database. See src/preview.js and
+  // "preview sites" in README.md.
+  "name": "kmp-previews",
+  "main": "src/preview.js",
+  "compatibility_date": "2025-09-01",
+  "account_id": "649c6a97581779191e3dc398a800044b",
+  // Every subdomain comes here, so a new or renamed preview works straight away. The bare domain
+  // and www are the blog Worker's custom domains, which win over routes. Needs a proxied wildcard
+  // DNS record (* -> AAAA 100::), and a route with no Worker for cdn. so photos skip this Worker.
+  "routes": [{ "pattern": "*.kylemaclachlanphotography.org/*", "zone_name": "kylemaclachlanphotography.org" }],
+  "workers_dev": false,
+  "vars": {
+    "SITE_ORIGIN": "https://kylemaclachlanphotography.org",
+    "CDN_BASE": "https://cdn.kylemaclachlanphotography.org",
+    "PREVIEW_BASE": "https://{name}.kylemaclachlanphotography.org"
+  },
+  "d1_databases": [
+    { "binding": "DB", "database_name": "blog-cdn", "database_id": "e4bb3d02-9f0d-4762-bdf1-f5c3ddba7efd", "migrations_dir": "migrations" }
+  ],
+  "env": {
+    // `npm run dev:previews`: no routes, so wrangler doesn't rewrite the hostname and
+    // http://<name>.localhost:8129 shows that preview. Shares the blog's local database.
+    "local": {
+      "routes": [],
+      "d1_databases": [
+        { "binding": "DB", "database_name": "blog-cdn", "database_id": "e4bb3d02-9f0d-4762-bdf1-f5c3ddba7efd", "migrations_dir": "migrations" }
+      ]
+    }
+  }
+}

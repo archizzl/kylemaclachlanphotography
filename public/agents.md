@@ -73,6 +73,20 @@ curl -s -X PUT https://kylemaclachlanphotography.org/api/me -H "Authorization: B
 
 The `PUT` replaces all three, so send all of them.
 
+### Preview site (optional)
+
+Before they have their own domain, the blog can be its own website at `<blog name>.kylemaclachlanphotography.org`: their feed, posts at `/<slug>`, `?tag=` feeds and photos, in the look saved in the style tab (`PUT /api/look`). Search engines don't list it.
+
+```bash
+curl -s -X PUT https://kylemaclachlanphotography.org/api/preview -H "Authorization: Bearer $KEY" \
+  -H "content-type: application/json" -d '{"on":true}'
+# {"preview":"https://mayas-notebook.kylemaclachlanphotography.org", ...}
+```
+
+- `GET /api/me` has `preview` (its address, or `null` when off) and `previewWouldBe` (the address it would get).
+- The address comes from `display_name`, so set the blog's name first. Renaming the blog moves the preview to the new name. A rename that would take another blog's preview address is refused with a 400.
+- `{"on":false}` turns it off. Only turn it on if the person asked for it.
+
 ## 4. Post fields: their own tags, numbers and details
 
 Each blog designs its own fields. There are up to **10**, of three kinds:

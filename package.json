@@ -6,8 +6,8 @@
     "test": "node --test test/*.test.js",
     "check": "node --test test/*.test.js && wrangler deploy --dry-run --outdir .wrangler/dry-run",
     "deploy": "wrangler d1 migrations apply blog-cdn --remote && wrangler deploy",
-    "dev:sites": "cd sites && wrangler dev --env local --port 8129",
-    "deploy:sites": "cd sites && wrangler deploy --env=''"
+    "dev:previews": "wrangler dev -c wrangler.previews.jsonc --env local --port 8129",
+    "deploy:previews": "wrangler deploy -c wrangler.previews.jsonc --env=''"
   },
   "dependencies": {
     "markdown-it": "15.0.3"

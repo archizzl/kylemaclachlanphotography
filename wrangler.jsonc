@@ -33,7 +33,10 @@
     // Cloudflare's own R2 measurements (src/r2usage.js) need the account and this site's bucket.
     // Also needs the secret CF_ANALYTICS_TOKEN: an API token with only "Account Analytics: Read".
     "CF_ACCOUNT_ID": "649c6a97581779191e3dc398a800044b",
-    "BLOG_BUCKET": "blog-cdn-files"
+    "BLOG_BUCKET": "blog-cdn-files",
+    // Preview sites (src/preview.js, served by the kmp-previews Worker in wrangler.previews.jsonc).
+    // Locally, .dev.vars sets http://{name}.localhost:8129.
+    "PREVIEW_BASE": "https://{name}.kylemaclachlanphotography.org"
   },
   "d1_databases": [
     {

@@ -29,6 +29,7 @@ One Cloudflare Worker (`blog-cdn`) on the Reaction Future Institute account, plu
   - **files**: drag-and-drop upload, copy link and delete. Photos also get **describe** (alt text and an optional caption) and **embed code** (a live embed, or a plain `<img>` for sites that block scripts). You can also import a `.md` or `.txt` file as a draft post.
   - **settings**:
     - blog name, site address, and an optional post address pattern (used for feed links);
+    - **preview site**: turn on `<blog name>.kylemaclachlanphotography.org` (see "preview sites" below);
     - **post fields** and **agent keys** (both below);
     - change password.
 - **Post fields** (`src/fields.js`): each blog designs its own, as many as they like (no caps on fields, tags or tags per post).
@@ -119,17 +120,19 @@ archie's own blog moved here on 2026-11-22, as user `archie`, using `scripts/imp
 
 Later deploys: `npm run deploy`.
 
-## test sites
+## preview sites
 
-Friends can try out their own site at `<name>.kylemaclachlanphotography.org` before buying a domain: **bruteforce** and **brbtime** so far. It's a separate little Worker, `kmp-test-sites` (`sites/`), so deploying a test site never touches the blog.
+A friend can try their blog out as its own website before buying a domain. In **settings → preview site** they press **turn on preview site**, and it's up straight away at `<blog name>.kylemaclachlanphotography.org`: just their blog (feed, single posts at `/<slug>`, `?tag=` feeds, their photos), in the look saved in their style tab.
 
-- Each site is plain files in `sites/public/<name>/`, with `index.html` as its home page. They're served at the subdomain as they are (`/about/` is `sites/public/<name>/about/index.html`). Pull in posts with the same embed codes a friend would use anywhere.
-- When a site gets its own domain, copy its folder to wherever it'll live; nothing in it depends on the subdomain.
-- Every response has `X-Robots-Tag: noindex`, so test sites stay out of search results.
-- Session cookies on the blog are host-only, so pages on a test subdomain can't see anyone's login.
-- **Add a site**: make `sites/public/<name>/`, add a `<name>.kylemaclachlanphotography.org` line to `routes` in `sites/wrangler.jsonc`, then deploy. The deploy creates the DNS record and certificate.
-- **Locally**: `npm run dev:sites` (or the `kmp-test-sites` launch config), then open http://bruteforce.localhost:8129 or http://brbtime.localhost:8129. Embeds read the live blog.
-- **Deploy**: `npm run deploy:sites`.
+- **The address follows the blog name** (`src/preview.js`, `previewName`): "BRUTE FORCE" is `brute-force.`, with accents and punctuation dropped, and the username if the name has no letters or numbers. Renaming the blog moves the preview, and the old address stops working.
+- **One blog per address.** Turning on, or renaming while on, is refused if another blog's preview has that address, or it's a reserved name like `www`, `cdn`, `api` or `admin` (`RESERVED`). Stored as `users.preview_host` (unique; `NULL` is off). Agents can turn it on with `PUT /api/preview`.
+- **Served by its own Worker**, `kmp-previews` (`wrangler.previews.jsonc`, code in `src/preview.js`), on the route `*.kylemaclachlanphotography.org/*`. It only reads the database, and uses the same page code as `/<username>` (`homePage` with `site`), with its stylesheet and script loaded from the main site. The apex and `www` are the blog Worker's custom domains, which win over the route.
+- Every preview response has `X-Robots-Tag: noindex`, and `/robots.txt` disallows everything. A disabled blog's preview disappears with it. Blog login cookies are host-only, so preview pages can't see anyone's login.
+- **Locally**: run `npm run dev` and `npm run dev:previews` (launch configs `blog-cdn` and `kmp-previews`). Turn a preview on in settings, then open `http://<name>.localhost:8129`. `PREVIEW_BASE` in `.dev.vars` makes the dashboard link there.
+- **Deploy**: `npm run deploy` (applies the migration), then `npm run deploy:previews`.
+- **One-time setup on the zone** (done by hand, since wrangler's login can't edit DNS):
+  - DNS: a proxied wildcard record, `*` → `AAAA 100::`. Specific records (`cdn`, the Worker custom domains) still win over it. Universal SSL already covers `*.kylemaclachlanphotography.org`.
+  - A Workers route `cdn.kylemaclachlanphotography.org/*` with **no Worker**, so photos never pass through `kmp-previews`. (If it were missing, the Worker passes `cdn.` requests straight through anyway.)
 
 ## going live (first time, for reference)
 
