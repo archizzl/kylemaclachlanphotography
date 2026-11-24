@@ -130,7 +130,7 @@ A friend can try their blog out as its own website before buying a domain. In **
 - Every preview response has `X-Robots-Tag: noindex`, and `/robots.txt` disallows everything. A disabled blog's preview disappears with it. Blog login cookies are host-only, so preview pages can't see anyone's login.
 - **Locally**: run `npm run dev` and `npm run dev:previews` (launch configs `blog-cdn` and `kmp-previews`). Turn a preview on in settings, then open `http://<name>.localhost:8129`. `PREVIEW_BASE` in `.dev.vars` makes the dashboard link there.
 - **Deploy**: `npm run deploy` (applies the migration), then `npm run deploy:previews`.
-- **One-time setup on the zone** (done by hand, since wrangler's login can't edit DNS):
+- **One-time setup on the zone** (done 2026-11-23; DNS by hand in the dashboard, since wrangler's login can't edit DNS; the `cdn.` route with the Cloudflare API and wrangler's token):
   - DNS: a proxied wildcard record, `*` → `AAAA 100::`. Specific records (`cdn`, the Worker custom domains) still win over it. Universal SSL already covers `*.kylemaclachlanphotography.org`.
   - A Workers route `cdn.kylemaclachlanphotography.org/*` with **no Worker**, so photos never pass through `kmp-previews`. (If it were missing, the Worker passes `cdn.` requests straight through anyway.)
 

@@ -14,6 +14,12 @@
 
 import { loadHome, homePage } from "./home.js";
 import { escapeHtml as e } from "./util.js";
+import { BRUTEFORCE, bruteforcePage } from "./sites/bruteforce.js";
+
+// Hand-made sites for one blog each, at their own fixed address rather than a preview. They show
+// whatever is in the blog's store, whether or not its preview is on. No blog's preview can use
+// these addresses.
+export const SITES = { bruteforce: { ...BRUTEFORCE, page: bruteforcePage } };
 
 // Names already used on the domain, or that would look official.
 const RESERVED = new Set(
@@ -53,7 +59,7 @@ export function nameFromHost(env, hostname) {
 
 // Checks a name can be used by this blog. Returns a problem, or "".
 export async function previewProblem(env, userId, name) {
-  if (!LABEL.test(name) || RESERVED.has(name)) {
+  if (!LABEL.test(name) || RESERVED.has(name) || Object.hasOwn(SITES, name)) {
     return `${name} can't be a preview address. Try a different blog name.`;
   }
   const taken = await env.DB.prepare("SELECT 1 FROM users WHERE preview_host = ? AND id != ?").bind(name, userId).first();
@@ -87,6 +93,7 @@ async function serve(request, env) {
   }
   if (request.method !== "GET" && request.method !== "HEAD") return page("not found", "", 405);
   if (url.pathname === "/robots.txt") return new Response("User-agent: *\nDisallow: /\n", { headers: { "content-type": "text/plain", "x-robots-tag": "noindex" } });
+  if (Object.hasOwn(SITES, name)) return site(env, url, SITES[name]);
 
   const user = await env.DB.prepare("SELECT username FROM users WHERE preview_host = ? AND disabled = 0").bind(name).first();
   if (!user) return page("no preview here", `there's no preview site at this address. if you renamed your blog, its preview moved to the new name: see settings in your dashboard.`, 404);
@@ -108,6 +115,18 @@ async function serve(request, env) {
       "x-robots-tag": "noindex",
       "x-frame-options": "DENY",
     },
+  });
+}
+
+async function site(env, url, s) {
+  if (url.pathname !== "/") return page("not found", `that page isn't here. <a href="/">go to ${e(s.title)}</a>.`, 404);
+  const { results: photos } = await env.DB.prepare(
+    `SELECT f.key, f.alt FROM files f JOIN users u ON u.id = f.user_id
+     WHERE u.username = ? AND u.disabled = 0 AND f.deleted_at IS NULL AND f.content_type LIKE 'image/%'
+     ORDER BY f.created_at DESC, f.id DESC`
+  ).bind(s.username).all();
+  return new Response(s.page({ title: s.title, photos }, { cdnBase: String(env.CDN_BASE || "").replace(/\/+$/, "") }), {
+    headers: { "content-type": "text/html; charset=utf-8", "cache-control": "public, max-age=60", "x-robots-tag": "noindex", "x-frame-options": "DENY" },
   });
 }
 
