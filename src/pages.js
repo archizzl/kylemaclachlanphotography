@@ -31,7 +31,7 @@ export function signupPage({ message = "", firstName = "", blogName = "" } = {})
     "sign up",
     `<main class="narrow">
 <h1>sign up</h1>
-<p class="muted">ask for a blog with kyle maclachlan photography cms. archie reads every request. once yours is accepted, you can log in with the password you pick here.</p>
+<p class="muted">kyle maclachlan photography blog cms request form</p>
 <p class="problem" role="alert"${message ? "" : " hidden"}>${e(message)}</p>
 <form method="post" action="/signup" enctype="multipart/form-data" class="stack" id="signup">
   <label>first name <input name="first_name" autocomplete="given-name" maxlength="60" required value="${e(firstName)}"></label>
