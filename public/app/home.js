@@ -23,3 +23,28 @@
     if (ev.target === viewer || ev.target.tagName === "BUTTON") viewer.close();
   });
 })();
+
+// Above the title: cycle through the accepted sign-ups' photos of Kyle MacLachlan.
+(function () {
+  var img = document.querySelector("img.kyle");
+  if (!img) return;
+  var list;
+  try { list = JSON.parse(img.getAttribute("data-kyle")) || []; } catch (e) { return; }
+  if (list.length < 2) return;
+  var i = 0;
+  for (var j = 0; j < list.length; j++) if (img.src === list[j].src) i = j;
+  function show(k) {
+    var next = new Image();
+    next.onload = function () {
+      img.src = list[k].src;
+      img.alt = list[k].alt;
+      if (list[k].w) { img.width = list[k].w; img.height = list[k].h; } else { img.removeAttribute("width"); img.removeAttribute("height"); }
+    };
+    next.src = list[k].src;
+  }
+  setInterval(function () {
+    if (document.hidden) return;
+    i = (i + 1) % list.length;
+    show(i);
+  }, 4000);
+})();

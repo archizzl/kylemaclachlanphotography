@@ -11,6 +11,7 @@ import { postLink } from "./feeds.js";
 import { excerpt } from "./markdown.js";
 import { hiddenClause, parseJson, publicFields } from "./fields.js";
 import { scopedCss } from "../public/app/stylekit.js";
+import { kylePhotos } from "./signup.js";
 
 export const HOME_PAGE_SIZE = 20;
 
@@ -58,6 +59,7 @@ export async function loadHome(env, { blog = "", page = 1, tag = "", slug = "" }
     posts: posts.slice(0, HOME_PAGE_SIZE),
     more: !slug && posts.length > HOME_PAGE_SIZE,
     photos,
+    kyle: await kylePhotos(env),
   };
 }
 
@@ -95,7 +97,16 @@ function longDate(d) {
   return isNaN(t) ? d : t.toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric", timeZone: "UTC" });
 }
 
-export function homePage({ blogs, only, page, tag, slug, posts, more, photos }, { cdnBase, site = null }) {
+// Above the site's name: the photos of Kyle MacLachlan that accepted sign-ups chose, one at a time.
+// The server picks one to show first; home.js moves through the rest every few seconds.
+function kyleHeader(kyle, cdnBase) {
+  if (!kyle?.length) return "";
+  const list = kyle.map(k => ({ src: `${cdnBase}/${k.key}`, alt: `kyle maclachlan, picked by ${k.first_name}`, w: k.width, h: k.height }));
+  const first = list[Math.floor(Math.random() * list.length)];
+  return `<img class="kyle" src="${e(first.src)}" alt="${e(first.alt)}"${first.w ? ` width="${first.w}" height="${first.h}"` : ""} data-kyle="${e(JSON.stringify(list))}">`;
+}
+
+export function homePage({ blogs, only, page, tag, slug, posts, more, photos, kyle = [] }, { cdnBase, site = null }) {
   const here = blogs.find(b => b.username === only) || (only ? { username: only, display_name: posts[0]?.display_name || "" } : null);
   // On a preview site the blog lives at / and its posts at /<post>; its stylesheet and script still
   // come from the main site.
@@ -121,8 +132,9 @@ export function homePage({ blogs, only, page, tag, slug, posts, more, photos }, 
 </aside>`
     : `<aside class="sidebar">
 <header class="masthead">
+  ${kyleHeader(kyle, cdnBase)}
   <h1><a href="/">kyle maclachlan photography</a></h1>
-  <a class="black_button" href="/login">log in</a>
+  <a class="black_button" href="/login">log in</a> <a class="signup" href="/signup">sign up</a>
 </header>
 <nav class="blogs" aria-label="blogs">
   <h2>blogs</h2>

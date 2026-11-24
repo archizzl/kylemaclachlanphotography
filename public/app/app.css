@@ -249,3 +249,13 @@ td.actions details .hint { font-size: 13px; margin: 8px 0 2px; max-width: 360px;
 .addr { display: flex; align-items: baseline; gap: 2px; }
 .addr input { flex: 1 1 auto; min-width: 0; }
 .addr .muted { white-space: nowrap; }
+
+/* /signup: a field for bots only */
+.trap { position: absolute; left: -9999px; width: 1px; height: 1px; overflow: hidden; }
+
+/* /admin: sign-up requests */
+ul.signups { list-style: none; padding: 0; margin: 0; }
+ul.signups li { display: flex; gap: 16px; align-items: flex-start; padding: 12px 0; border-top: 1px solid #ddd; }
+ul.signups img { width: 140px; height: auto; display: block; }
+ul.signups p { margin: 0 0 8px; }
+ul.signups form { margin: 0 0 8px; }

@@ -5,7 +5,7 @@ import { webUrl, today } from "./util.js";
 // Usernames are the first part of public URLs (/<user>/feed.xml), so they can't shadow the
 // site's own paths.
 const RESERVED = new Set(
-  "admin api app login logout dashboard embed embed.js _cdn cdn www static assets public favicon.ico robots.txt index.html style.css settings help about".split(" ")
+  "admin api app login logout signup dashboard embed embed.js _cdn cdn www static assets public favicon.ico robots.txt index.html style.css settings help about".split(" ")
 );
 
 export function usernameProblem(name) {

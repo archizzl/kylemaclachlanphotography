@@ -28,7 +28,8 @@ import { slugify } from "./rules.js";
 import { appBilling, costReport, loadCostData, nextRenewal, RATES, reportFor, storedNow } from "./costs.js";
 import { measuredByMonth, syncR2Usage, syncStatus } from "./r2usage.js";
 import { cleanFieldDefs, cleanPostFields, growChoices, hiddenClause, listQuery, parseJson } from "./fields.js";
-import { adminLoginPage, adminPage, dashboardPage, loginPage, simplePage } from "./pages.js";
+import { adminLoginPage, adminPage, dashboardPage, loginPage, signupPage, signupThanksPage, simplePage } from "./pages.js";
+import { acceptSignup, denySignup, pendingSignups, submitSignup, waitingFor } from "./signup.js";
 import { cleanPreviewName, previewDomain, previewProblem, previewUrl, suggestedPreviewName } from "./preview.js";
 import { html, json, now, readJson, redirect } from "./util.js";
 
@@ -90,6 +91,17 @@ async function route(request, env, ctx) {
     return html(loginPage());
   }
   if (path === "/login" && method === "POST") return login(request, env);
+
+  // ---- asking for a blog ----
+  if (path === "/signup" && method === "GET") return html(signupPage());
+  if (path === "/signup" && method === "POST") {
+    // signup.js asks for JSON; a plain form post (no JavaScript) gets a page back.
+    const wantsJson = (request.headers.get("accept") || "").includes("application/json");
+    const r = await submitSignup(request, env);
+    if (wantsJson) return json(r.error ? { error: r.error } : { username: r.username, firstName: r.firstName }, r.error ? r.status : 200);
+    if (r.error) return html(signupPage({ message: r.error }), r.status);
+    return html(signupThanksPage(r));
+  }
   if (path === "/logout") return redirect("/login", await endSession(env, request));
   if (path === "/dashboard" && method === "GET") {
     const user = await currentUser(env, request);
@@ -168,6 +180,13 @@ async function login(request, env) {
   // A locked account stays locked, even with the right password, until Archie sets a new one.
   if (user?.locked_at) return html(loginPage({ message: LOCKED_MESSAGE, username, locked: true }), 423);
 
+  if (!user) {
+    // A sign-up that's still waiting for Archie: say so, rather than "didn't match".
+    const waiting = await waitingFor(env, username);
+    if (waiting && (await checkPassword(password, waiting.password_hash))) {
+      return html(loginPage({ message: "Your sign-up is still waiting for Archie. Try again once it's accepted.", username }), 403);
+    }
+  }
   if (!user || !ok) {
     await recordFail(env, request);
     if (!user) return html(loginPage({ message: "That username and password didn't match.", username }), 401);
@@ -235,6 +254,13 @@ async function admin(path, method, request, env) {
     return adminView(env, { text: `added ${username}.`, password });
   }
 
+  const sm = path.match(/^\/admin\/signups\/(\d+)\/(accept|deny)$/);
+  if (sm && method === "POST") {
+    const form = await request.formData();
+    const note = sm[2] === "accept" ? await acceptSignup(env, Number(sm[1]), form.get("username")) : await denySignup(env, Number(sm[1]));
+    return adminView(env, note, note.problem ? 400 : 200);
+  }
+
   const m = path.match(/^\/admin\/users\/(\d+)\/(password|disabled|domain)$/);
   if (m && method === "POST") {
     const user = await env.DB.prepare("SELECT * FROM users WHERE id = ?").bind(Number(m[1])).first();
@@ -276,7 +302,7 @@ async function admin(path, method, request, env) {
 async function adminView(env, note = null, status = 200) {
   const users = await listUsers(env);
   const billing = appBilling(users.map(u => u.report));
-  return html(adminPage({ users, billing, usage: await accountUsage(env) }, note), status);
+  return html(adminPage({ users, billing, usage: await accountUsage(env), signups: await pendingSignups(env), cdnBase: cdnBase(env) }, note), status);
 }
 
 async function listUsers(env) {

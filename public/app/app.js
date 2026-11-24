@@ -2,6 +2,7 @@
 
 import { CONTROLS, DEFAULT_LOOK, SITE_CONTROLS, cssFrom, siteFontStack } from "./stylekit.js";
 import { embedCode, sortChoices } from "./embedkit.js";
+import { shrink as shrinkTo } from "./photos.js";
 
 const { username, cdnBase, origin } = window.KMP;
 const app = document.getElementById("app");
@@ -918,31 +919,7 @@ Ask me before publishing anything or changing my own site.`;
 
 // Phone photos are big and carry GPS location. Redrawing them on a canvas makes them smaller
 // and drops that hidden information. GIFs are left alone so animations keep working.
-async function shrink(file) {
-  const type = file.type.toLowerCase();
-  const heic = /heic|heif/.test(type) || /\.(heic|heif)$/i.test(file.name);
-  if (!/^image\/(jpeg|png|webp)$/.test(type) && !heic) return { blob: file, name: file.name };
-  let bmp;
-  try {
-    bmp = await createImageBitmap(file, { imageOrientation: "from-image" });
-  } catch {
-    if (heic) throw new Error("This browser can't open HEIC photos. Export it as a JPEG first (or upload from your phone).");
-    return { blob: file, name: file.name };
-  }
-  const scale = Math.min(1, MAX_SIDE / Math.max(bmp.width, bmp.height));
-  // PNG and WebP only get redrawn when they're too big (to keep transparency); JPEGs always, to drop location data.
-  if (scale === 1 && !heic && type !== "image/jpeg") return { blob: file, name: file.name, width: bmp.width, height: bmp.height };
-  const w = Math.round(bmp.width * scale), h = Math.round(bmp.height * scale);
-  const canvas = document.createElement("canvas");
-  canvas.width = w;
-  canvas.height = h;
-  canvas.getContext("2d").drawImage(bmp, 0, 0, w, h);
-  const outType = type === "image/png" ? "image/png" : type === "image/webp" ? "image/webp" : "image/jpeg";
-  const blob = await new Promise(r => canvas.toBlob(r, outType, 0.85));
-  if (!blob || blob.type !== outType) return { blob: file, name: file.name, width: bmp.width, height: bmp.height };
-  const ext = { "image/png": "png", "image/webp": "webp", "image/jpeg": "jpg" }[outType];
-  return { blob, name: file.name.replace(/\.[^.]+$/, "") + "." + ext, width: w, height: h };
-}
+const shrink = file => shrinkTo(file, MAX_SIDE);
 
 async function uploadFile(file) {
   const s = await shrink(file);

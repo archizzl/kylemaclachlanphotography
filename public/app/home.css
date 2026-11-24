@@ -19,6 +19,9 @@ h1 a, h1 a:visited { color: #000; text-decoration: none; }
 /* site name + log in, at the top of the sidebar */
 .masthead { padding: 0 0 18px; margin: 0 0 18px; border-bottom: 1px solid #000; }
 .masthead .black_button { display: inline-block; margin-top: 10px; }
+.masthead .signup { font-size: 15px; margin-left: 6px; }
+/* accepted sign-ups' photos of Kyle MacLachlan, above the title */
+img.kyle { display: block; width: 100%; height: auto; max-height: 320px; object-fit: contain; object-position: left bottom; margin: 0 0 12px; }
 
 .layout { display: grid; grid-template-columns: 250px minmax(0, 700px); gap: 40px; padding: 0 16px; }
 
@@ -81,6 +84,9 @@ body { padding-bottom: var(--strip); }
   .masthead { display: flex; align-items: center; gap: 12px; padding: 0 0 12px; margin: 0 0 10px; }
   .masthead h1 { flex: 1; font-size: 26px; }
   .masthead .black_button { margin-top: 0; }
+  .masthead { flex-wrap: wrap; }
+  .masthead .signup { margin-left: 0; }
+  img.kyle { flex: 0 0 100%; max-height: 40vh; margin: 0; }
   .blogs ul { display: flex; flex-wrap: wrap; gap: 4px 14px; padding-bottom: 12px; }
   .blogs li { margin: 0; overflow: visible; }
   body { padding-bottom: 0; }

@@ -822,3 +822,88 @@ test("hidden tags: their posts stay out of lists and feeds unless the tag is ask
   await h("/api/fields", { method: "PUT", body: { fields: [{ ...saved.fields[0], hidden: [] }] } });
   assert.ok(has(await (await reader("/hider?again")).text(), "Part One", "Part Two", "Out Loud"));
 });
+
+test("sign-ups: a request waits for archie, who accepts (account + front page photo) or denies (photo deleted)", async () => {
+  const JPEG = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0, 16, 74, 70, 73, 70, 0, 1, 1, 0, 0, 1, 0, 1, 0, 0]);
+  const form = (fields, photo = new File([JPEG], "kyle.jpg", { type: "image/jpeg" })) => {
+    const f = new FormData();
+    for (const [k, v] of Object.entries(fields)) f.set(k, v);
+    if (photo) f.set("photo", photo);
+    return f;
+  };
+  const visitor = browser("24.0.0.1");
+  assert.match(await (await visitor("/signup")).text(), /your favorite photo of kyle maclachlan/);
+
+  // Problems come back on the form (or as JSON for signup.js).
+  const short = await visitor("/signup", { method: "POST", raw: form({ first_name: "Dale", blog_name: "Coffee Log", password: "short" }) });
+  assert.equal(short.status, 400);
+  assert.match(await short.text(), /at least 8 characters/);
+  const fake = await visitor("/signup", {
+    method: "POST",
+    raw: form({ first_name: "Dale", blog_name: "Coffee Log", password: "damn-fine-coffee" }, new File(["<svg/>"], "kyle.jpg", { type: "image/jpeg" })),
+    headers: { accept: "application/json" },
+  });
+  assert.equal(fake.status, 400);
+  assert.match((await fake.json()).error, /doesn't look like a photo/);
+  // Bots fill in the hidden field: they're told thanks, and nothing is kept.
+  await visitor("/signup", { method: "POST", raw: form({ first_name: "Bot", blog_name: "Spam", password: "spam-spam-spam", website: "x" }) });
+  assert.equal((await env.DB.prepare("SELECT COUNT(*) AS n FROM signups WHERE first_name = 'Bot'").first()).n, 0);
+
+  // A good request: the username comes from the blog name.
+  const ok = await visitor("/signup", { method: "POST", raw: form({ first_name: "Dale", blog_name: "Coffee Log!", password: "damn-fine-coffee", width: "800", height: "1000" }) });
+  assert.equal(ok.status, 200);
+  assert.match(await ok.text(), /log in<\/a> as <b>coffeelog<\/b>/);
+  const row = await env.DB.prepare("SELECT * FROM signups WHERE username = 'coffeelog'").first();
+  assert.match(row.photo_key, /^_kyle\/[0-9a-f-]{36}\.jpg$/);
+  assert.match(row.password_hash, /^pbkdf2\$/);
+  assert.ok(await env.FILES.get(row.photo_key));
+  // A second request with the same blog name gets the next username.
+  const other = browser("24.0.0.2");
+  const two = await other("/signup", { method: "POST", raw: form({ first_name: "Audrey", blog_name: "coffee log", password: "cherry-pie-123" }), headers: { accept: "application/json" } });
+  assert.deepEqual(await two.json(), { username: "coffeelog-2", firstName: "Audrey" });
+
+  // Logging in before it's accepted says it's waiting.
+  const dale = browser("24.0.0.3");
+  const early = await dale("/login", { method: "POST", form: { username: "coffeelog", password: "damn-fine-coffee" } });
+  assert.equal(early.status, 403);
+  assert.match(await early.text(), /still waiting for Archie/);
+
+  // Archie sees both, with their photos.
+  const admin = await (await archie("/admin")).text();
+  assert.match(admin, /<h2>sign-up requests<\/h2>/);
+  assert.match(admin, /<b>Dale<\/b> wants <b>Coffee Log!<\/b>/);
+  assert.ok(admin.includes(`${CDN}/${row.photo_key}`));
+
+  // The front page has no Kyle photos yet.
+  assert.ok(!(await (await visitor("/?k0")).text()).includes('class="kyle"'));
+
+  // Accept Dale (under a different username): the account works with Dale's own password.
+  const id2 = (await env.DB.prepare("SELECT id FROM signups WHERE username = 'coffeelog-2'").first()).id;
+  const taken = await archie(`/admin/signups/${row.id}/accept`, { method: "POST", form: { username: "coffeelog-2" } });
+  assert.equal(taken.status, 400); // Audrey's request is waiting with that one
+  const accepted = await (await archie(`/admin/signups/${row.id}/accept`, { method: "POST", form: { username: "dale" } })).text();
+  assert.match(accepted, /accepted Dale\. they can log in now as dale/);
+  const user = await env.DB.prepare("SELECT * FROM users WHERE username = 'dale'").first();
+  assert.equal(user.display_name, "Coffee Log!");
+  assert.equal(user.first_name, "Dale");
+  assert.equal((await env.DB.prepare("SELECT password_hash FROM signups WHERE id = ?").bind(row.id).first()).password_hash, "");
+  assert.equal((await dale("/login", { method: "POST", form: { username: "dale", password: "damn-fine-coffee" } })).headers.get("location"), "/dashboard");
+  assert.equal((await archie(`/admin/signups/${row.id}/accept`, { method: "POST", form: {} })).status, 400); // already decided
+
+  // Dale's photo is now above the front page's title.
+  const front = await (await visitor("/?k1")).text();
+  assert.match(front, new RegExp(`<img class="kyle" src="${CDN}/${row.photo_key}" alt="kyle maclachlan, picked by Dale" width="800" height="1000" data-kyle=`));
+  assert.ok(front.indexOf('class="kyle"') < front.indexOf("kyle maclachlan photography</a></h1>"));
+
+  // Deny Audrey: the photo is deleted and the username is free again.
+  const audreyKey = (await env.DB.prepare("SELECT photo_key FROM signups WHERE id = ?").bind(id2).first()).photo_key;
+  assert.match(await (await archie(`/admin/signups/${id2}/deny`, { method: "POST", form: {} })).text(), /denied Audrey/);
+  assert.equal(await env.FILES.get(audreyKey), null);
+  assert.ok(!(await (await archie("/admin")).text()).includes("<h2>sign-up requests</h2>"));
+  assert.equal((await other("/login", { method: "POST", form: { username: "coffeelog-2", password: "cherry-pie-123" } })).status, 401);
+
+  // Three requests a day from one place, at most.
+  const busy = browser("24.0.0.9");
+  for (let i = 0; i < 3; i++) await busy("/signup", { method: "POST", raw: form({ first_name: `F${i}`, blog_name: `Blog ${i}`, password: "password-123" }) });
+  assert.equal((await busy("/signup", { method: "POST", raw: form({ first_name: "F4", blog_name: "Blog 4", password: "password-123" }) })).status, 429);
+});

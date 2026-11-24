@@ -1,4 +1,4 @@
-// Server-built pages: the two login forms, Archie's admin page, the dashboard shell and errors.
+// Server-built pages: the two login forms, sign-up, Archie's admin page, the dashboard shell and errors.
 
 import { escapeHtml as e, money } from "./util.js";
 
@@ -25,12 +25,50 @@ export function simplePage(title, message) {
   return shell(title, `<main class="narrow"><h1>${e(title)}</h1><p>${message}</p><p><a href="/">home</a></p></main>`);
 }
 
+// /signup: works without JavaScript; signup.js shrinks the photo first when it can.
+export function signupPage({ message = "", firstName = "", blogName = "" } = {}) {
+  return shell(
+    "sign up",
+    `<main class="narrow">
+<h1>sign up</h1>
+<p class="muted">ask for a blog on kyle maclachlan photography. archie reads every request. once yours is accepted, you can log in with the password you pick here.</p>
+<p class="problem" role="alert"${message ? "" : " hidden"}>${e(message)}</p>
+<form method="post" action="/signup" enctype="multipart/form-data" class="stack" id="signup">
+  <label>first name <input name="first_name" autocomplete="given-name" maxlength="60" required value="${e(firstName)}"></label>
+  <label>blog name <input name="blog_name" maxlength="200" required value="${e(blogName)}" placeholder="maya's notebook"></label>
+  <p class="muted" id="username-note" hidden></p>
+  <label>password <span class="muted">(at least 8 characters)</span> <input name="password" type="password" autocomplete="new-password" minlength="8" maxlength="200" required></label>
+  <label>your favorite photo of kyle maclachlan <input name="photo" type="file" accept="image/jpeg,image/png,image/webp,image/gif,image/avif" required></label>
+  <p class="muted">if you're accepted, it goes in the rotation at the top of the front page.</p>
+  <label class="trap" aria-hidden="true">leave this empty <input name="website" tabindex="-1" autocomplete="off"></label>
+  <button type="submit">send</button>
+</form>
+</main>`,
+    { bodyClass: "signup", scripts: `<script src="/app/signup.js" type="module"></script>` }
+  );
+}
+
+export function signupThanksPage({ firstName, username }) {
+  return shell(
+    "thanks",
+    `<main class="narrow">
+<h1>thanks${firstName ? `, ${e(firstName)}` : ""}</h1>
+<p>archie will look at your sign-up.${
+      username
+        ? ` once it's accepted, <a href="/login">log in</a> as <b>${e(username)}</b> with the password you chose. if you try before then, the login page will say it's still waiting.`
+        : ""
+    }</p>
+<p><a href="/">front page</a></p>
+</main>`
+  );
+}
+
 export function loginPage({ message = "", username = "", locked = false } = {}) {
   return shell(
     "log in",
     `<main class="narrow">
 <h1>log in</h1>
-<p class="muted">use the username and password Archie gave you.</p>
+<p class="muted">use the username and password Archie gave you, or the ones from your sign-up. no blog yet? <a href="/signup">sign up</a>.</p>
 ${message ? `<p class="problem${locked ? " locked" : ""}" role="alert">${e(message)}</p>` : ""}
 <form method="post" action="/login" class="stack">
   <label>username <input name="username" autocomplete="username" autocapitalize="none" spellcheck="false" required value="${e(username)}"></label>
@@ -132,7 +170,31 @@ ${rows
 }
 
 // data: { users, billing, usage }. note: { text, password?, problem? } shown at the top after an action.
-export function adminPage({ users, billing, usage }, note = null) {
+// Sign-up requests waiting for Archie, with their photo of Kyle MacLachlan.
+function signupsSection(signups, cdnBase) {
+  if (!signups.length) return "";
+  return `<section class="attention">
+<h2>sign-up requests</h2>
+<p class="muted">accepting makes their account, with the password they chose, and adds their photo to the front page. you can change the username first. denying deletes the photo.</p>
+<ul class="signups">${signups
+    .map(
+      s => `<li>
+  <a href="${e(`${cdnBase}/${s.photo_key}`)}" target="_blank" rel="noopener"><img src="${e(`${cdnBase}/${s.photo_key}`)}" alt="${e(s.first_name)}'s photo of kyle maclachlan"></a>
+  <div>
+    <p><b>${e(s.first_name)}</b> wants <b>${e(s.blog_name)}</b> <span class="muted">· ${e(shortDate(s.created_at))}</span></p>
+    <form method="post" action="/admin/signups/${s.id}/accept" class="row">
+      <label>username <input name="username" value="${e(s.username)}" required pattern="[a-z0-9]([a-z0-9\\-]{0,28}[a-z0-9])?" autocapitalize="none" spellcheck="false"></label>
+      <button type="submit" class="primary">accept</button>
+    </form>
+    <form method="post" action="/admin/signups/${s.id}/deny"><button type="submit" class="danger">deny</button></form>
+  </div>
+</li>`
+    )
+    .join("")}</ul>
+</section>`;
+}
+
+export function adminPage({ users, billing, usage, signups = [], cdnBase = "" }, note = null) {
   const locked = users.filter(u => u.locked_at);
   const thisMonth = billing.months.find(m => m.partial);
   const rows = users
@@ -199,7 +261,9 @@ ${noteHtml}
   <div><dt>whole app, all time</dt><dd>${money(billing.allTime.total)}</dd></div>
   <div><dt>this month so far</dt><dd>${money(thisMonth?.total || 0)}</dd></div>
   <div class="${locked.length ? "alert" : ""}"><dt>locked accounts</dt><dd>${locked.length}</dd></div>
+  <div class="${signups.length ? "alert" : ""}"><dt>sign-up requests</dt><dd>${signups.length}</dd></div>
 </dl>
+${signupsSection(signups, cdnBase)}
 ${lockedHtml}
 ${billingSection(billing)}
 <section>
