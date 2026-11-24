@@ -126,7 +126,7 @@ export async function acceptSignup(env, id, username) {
     .bind(name, s.blog_name, s.first_name, s.password_hash, t)
     .first();
   await env.DB.prepare("UPDATE signups SET status = 'accepted', username = ?, user_id = ?, password_hash = '', decided_at = ? WHERE id = ?").bind(name, user.id, t, id).run();
-  return { text: `accepted ${s.first_name}. they can log in now as ${name}, with the password they chose. their photo is on the front page.` };
+  return { text: `accepted ${s.first_name} as ${name}.` };
 }
 
 // Denies a request and deletes its photo.
@@ -135,7 +135,7 @@ export async function denySignup(env, id) {
   if (!s) return { text: "That request was already decided.", problem: true };
   await env.FILES.delete(s.photo_key);
   await env.DB.prepare("UPDATE signups SET status = 'denied', password_hash = '', decided_at = ? WHERE id = ?").bind(now(), id).run();
-  return { text: `denied ${s.first_name}'s request. their photo is deleted.` };
+  return { text: `denied ${s.first_name}.` };
 }
 
 // The accepted photos, for the front page, oldest first.

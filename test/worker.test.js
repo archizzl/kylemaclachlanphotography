@@ -852,7 +852,7 @@ test("sign-ups: a request waits for archie, who accepts (account + front page ph
   // A good request: the username comes from the blog name.
   const ok = await visitor("/signup", { method: "POST", raw: form({ first_name: "Dale", blog_name: "Coffee Log!", password: "damn-fine-coffee", width: "800", height: "1000" }) });
   assert.equal(ok.status, 200);
-  assert.match(await ok.text(), /log in<\/a> as <b>coffeelog<\/b>/);
+  assert.match(await ok.text(), /username: <b>coffeelog<\/b>/);
   const row = await env.DB.prepare("SELECT * FROM signups WHERE username = 'coffeelog'").first();
   assert.match(row.photo_key, /^_kyle\/[0-9a-f-]{36}\.jpg$/);
   assert.match(row.password_hash, /^pbkdf2\$/);
@@ -882,7 +882,7 @@ test("sign-ups: a request waits for archie, who accepts (account + front page ph
   const taken = await archie(`/admin/signups/${row.id}/accept`, { method: "POST", form: { username: "coffeelog-2" } });
   assert.equal(taken.status, 400); // Audrey's request is waiting with that one
   const accepted = await (await archie(`/admin/signups/${row.id}/accept`, { method: "POST", form: { username: "dale" } })).text();
-  assert.match(accepted, /accepted Dale\. they can log in now as dale/);
+  assert.match(accepted, /accepted Dale as dale\./);
   const user = await env.DB.prepare("SELECT * FROM users WHERE username = 'dale'").first();
   assert.equal(user.display_name, "Coffee Log!");
   assert.equal(user.first_name, "Dale");

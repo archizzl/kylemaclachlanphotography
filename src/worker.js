@@ -184,7 +184,7 @@ async function login(request, env) {
     // A sign-up that's still waiting for Archie: say so, rather than "didn't match".
     const waiting = await waitingFor(env, username);
     if (waiting && (await checkPassword(password, waiting.password_hash))) {
-      return html(loginPage({ message: "Your sign-up is still waiting for Archie. Try again once it's accepted.", username }), 403);
+      return html(loginPage({ message: "Your sign-up is still waiting for Archie.", username }), 403);
     }
   }
   if (!user || !ok) {

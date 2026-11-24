@@ -22,7 +22,7 @@ const esc = s => String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;"
 function showUsername() {
   const u = squash(form.blog_name.value) || squash(form.first_name.value);
   note.hidden = !u;
-  note.innerHTML = u ? `you'll log in as <b>${esc(u)}</b> (or close to it, if someone has it already).` : "";
+  note.innerHTML = u ? `username: <b>${esc(u)}</b>` : "";
 }
 form.blog_name.addEventListener("input", showUsername);
 form.first_name.addEventListener("input", showUsername);
@@ -47,7 +47,7 @@ form.addEventListener("submit", async ev => {
     try { r = await res.json(); } catch {}
     if (!res.ok) throw new Error(r.error || "Something went wrong. Try again.");
     document.querySelector("main").innerHTML = `<h1>thanks${r.firstName ? `, ${esc(r.firstName)}` : ""}</h1>
-      <p>archie will look at your sign-up.${r.username ? ` once it's accepted, <a href="/login">log in</a> as <b>${esc(r.username)}</b> with the password you chose. if you try before then, the login page will say it's still waiting.` : ""}</p>
+      ${r.username ? `<p>username: <b>${esc(r.username)}</b></p>` : ""}
       <p><a href="/">front page</a></p>`;
     document.title = "thanks";
   } catch (err) {

@@ -37,7 +37,7 @@ export function signupPage({ message = "", firstName = "", blogName = "" } = {})
   <label>first name <input name="first_name" autocomplete="given-name" maxlength="60" required value="${e(firstName)}"></label>
   <label>blog name <input name="blog_name" maxlength="200" required value="${e(blogName)}" placeholder="maya's notebook"></label>
   <p class="muted" id="username-note" hidden></p>
-  <label>password <span class="muted">(at least 8 characters)</span> <input name="password" type="password" autocomplete="new-password" minlength="8" maxlength="200" required></label>
+  <label>password <input name="password" type="password" autocomplete="new-password" minlength="8" maxlength="200" required></label>
   <label>your favorite photo of kyle maclachlan <input name="photo" type="file" accept="image/jpeg,image/png,image/webp,image/gif,image/avif" required></label>
   <label class="trap" aria-hidden="true">leave this empty <input name="website" tabindex="-1" autocomplete="off"></label>
   <button type="submit">send</button>
@@ -52,11 +52,7 @@ export function signupThanksPage({ firstName, username }) {
     "thanks",
     `<main class="narrow">
 <h1>thanks${firstName ? `, ${e(firstName)}` : ""}</h1>
-<p>archie will look at your sign-up.${
-      username
-        ? ` once it's accepted, <a href="/login">log in</a> as <b>${e(username)}</b> with the password you chose. if you try before then, the login page will say it's still waiting.`
-        : ""
-    }</p>
+${username ? `<p>username: <b>${e(username)}</b></p>` : ""}
 <p><a href="/">front page</a></p>
 </main>`
   );
@@ -67,7 +63,6 @@ export function loginPage({ message = "", username = "", locked = false } = {}) 
     "log in",
     `<main class="narrow">
 <h1>log in</h1>
-<p class="muted">use the username and password Archie gave you, or the ones from your sign-up. no blog yet? <a href="/signup">sign up</a>.</p>
 ${message ? `<p class="problem${locked ? " locked" : ""}" role="alert">${e(message)}</p>` : ""}
 <form method="post" action="/login" class="stack">
   <label>username <input name="username" autocomplete="username" autocapitalize="none" spellcheck="false" required value="${e(username)}"></label>
@@ -172,7 +167,6 @@ function signupsSection(signups, cdnBase) {
   if (!signups.length) return "";
   return `<section class="attention">
 <h2>sign-up requests</h2>
-<p class="muted">accepting makes their account, with the password they chose, and adds their photo to the front page. you can change the username first. denying deletes the photo.</p>
 <ul class="signups">${signups
     .map(
       s => `<li>
@@ -225,7 +219,7 @@ export function adminPage({ users, billing, usage, signups = [], cdnBase = "" },
     ? `<div class="note${note.problem ? " problem" : ""}"><p>${e(note.text)}</p>${
         note.password
           ? `<p>password: <code class="secret">${e(note.password)}</code> <button type="button" data-copy="${e(note.password)}">copy</button></p>
-             <p class="muted">this is the only time it's shown. send it to them somewhere private.</p>`
+             <p class="muted">only shown once.</p>`
           : ""
       }</div>`
     : "";
@@ -233,7 +227,6 @@ export function adminPage({ users, billing, usage, signups = [], cdnBase = "" },
   const lockedHtml = locked.length
     ? `<section class="attention">
 <h2>locked out</h2>
-<p class="muted">three wrong passwords in a row locks an account. they're told to text you; setting a new password unlocks it.</p>
 <ul class="lockedlist">${locked
         .map(
           u => `<li><b>${e(u.username)}</b>${u.display_name ? ` <span class="muted">(${e(u.display_name)})</span>` : ""} <span class="muted">locked ${e(shortDate(u.locked_at))}</span>
@@ -270,7 +263,6 @@ ${users.length ? `<table class="users"><thead><tr><th>blog</th><th>status</th><t
   <label>password <input name="password" type="text" autocomplete="off" placeholder="blank = make one"></label>
   <button type="submit">add</button>
 </form>
-<p class="muted">usernames: 1–30 lowercase letters, numbers or dashes. they log in at <a href="/login">/login</a>. their files go to <code>cdn…/username/</code>.</p>
 </section>
 ${usageSection(usage)}
 </main>`,

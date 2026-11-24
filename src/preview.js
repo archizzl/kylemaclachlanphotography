@@ -113,7 +113,7 @@ async function serve(request, env) {
   if (Object.hasOwn(SITES, name)) return site(env, url, SITES[name]);
 
   const user = await env.DB.prepare("SELECT username FROM users WHERE preview_host = ? AND disabled = 0").bind(name).first();
-  if (!user) return page("no preview here", `there's no preview site at this address. if you changed your preview's address, it's at the new one: see settings in your dashboard.`, 404);
+  if (!user) return page("no preview here", "", 404);
 
   const path = url.pathname.replace(/\/+$/, "") || "/";
   const slug = path === "/" ? "" : SLUG.exec(path)?.[1];

@@ -82,7 +82,6 @@ function showSnippet(title, choices, extra = "") {
   const list = typeof choices === "string" ? [{ code: choices }] : choices;
   const d = document.createElement("dialog");
   d.innerHTML = `<h2>${esc(title)}</h2>
-    ${list.length === 1 ? `<p class="muted">paste this into your page wherever it should show up. it updates by itself when you edit here.</p>` : ""}
     ${list
       .map(
         (c, i) => `${c.label ? `<h3 style="margin:14px 0 2px;font-size:1em">${esc(c.label)}</h3>` : ""}
@@ -148,7 +147,7 @@ async function postsView() {
       p => `<li>
         <div class="grow"><a href="#edit/${p.id}">${esc(p.title)}</a><time>${esc(p.date)}</time>
           ${fieldSummary(p.fields) ? `<div class="muted">${esc(fieldSummary(p.fields))}</div>` : ""}
-          ${p.published && hiddenBy(p.fields) ? `<div class="muted">hidden from lists (#${esc(hiddenBy(p.fields))})</div>` : ""}</div>
+          ${p.published && hiddenBy(p.fields) ? `<div class="muted">hidden (#${esc(hiddenBy(p.fields))})</div>` : ""}</div>
         ${p.published ? '<span class="live">published</span>' : '<span class="draft">draft</span>'}
         <div class="buttons">
           ${p.published ? `<button data-embed="${p.id}">embed code</button>` : ""}
@@ -252,8 +251,8 @@ async function editView(id) {
       buttons();
       if (location.hash !== `#edit/${post.id}`) history.replaceState(null, "", `#edit/${post.id}`);
       if (published && !wasPublished) {
-        showSnippet("published!", postSnippet(post), `<p class="muted">it's also in your feeds, and the text is at <a href="${cdnBase}/${username}/posts/${post.slug}.md" target="_blank">${esc(`${username}/posts/${post.slug}.md`)}</a>.</p>`);
-      } else toast(published ? "saved. embeds update within a minute." : wasPublished ? "unpublished. it's hidden everywhere now." : "draft saved");
+        showSnippet("published!", postSnippet(post));
+      } else toast(published ? "saved" : wasPublished ? "unpublished" : "draft saved");
     } catch (err) {
       status.textContent = "not saved";
       toast(err.message, true);
@@ -330,7 +329,7 @@ async function editView(id) {
 // ---- post fields in the editor ----
 
 function fieldInputs(defs, values, isNew) {
-  if (!defs.length) return `<p class="muted" style="font-size:15px">want tags, numbers or a location on your posts? set them up in <a href="#settings">settings</a>.</p>`;
+  if (!defs.length) return "";
   return `<fieldset id="postfields" class="postfields">${defs
     .map(d => {
       const v = values[d.key];
@@ -474,7 +473,7 @@ function setupTagInputs(container, defs, onChange) {
 function fieldsEditor() {
   let defs = structuredClone(me.fields || []);
   const box = $("#fields");
-  const kinds = { tags: "tags to pick from", number: "a number", text: "a bit of text (like a place)" };
+  const kinds = { tags: "tags to pick from", number: "a number", text: "text" };
 
   function draw() {
     box.innerHTML = `${defs
@@ -486,12 +485,11 @@ function fieldsEditor() {
             <span class="buttons"><button type="button" data-move="-1" title="move up"${i ? "" : " disabled"}>↑</button><button type="button" data-move="1" title="move down"${i < defs.length - 1 ? "" : " disabled"}>↓</button><button type="button" class="danger" data-remove>remove</button></span>
           </div>
           ${d.kind === "tags" ? `<label>tags, separated by commas <input data-k="choices" value="${esc((d.choices || []).join(", "))}" placeholder="tender, restless, hopeful, giddy"></label>
-          <label class="check"><input type="checkbox" data-k="open"${d.open ? " checked" : ""}> let me type new tags while writing (they're added here)</label>
-          ${(d.choices || []).length ? `<div class="hidetags"><p class="muted">hide posts with these tags from lists:</p>
-            <div class="chips">${d.choices.map(c => `<label><input type="checkbox" data-k="hidden" value="${esc(c)}"${(d.hidden || []).some(h => h.toLowerCase() === c.toLowerCase()) ? " checked" : ""}>${esc(c)}</label>`).join("")}</div>
-            <p class="muted">their posts stay off your blog's page, the front page, feeds and embeds, unless someone asks for the tag (like <code>/${esc(username)}?tag=${esc((d.hidden || [])[0] || d.choices[0])}</code>, or an embed with <code>data-filter="${esc(d.key || "tags")}:${esc((d.hidden || [])[0] || d.choices[0])}"</code>). each post's own page still works. it's not private: anyone with the link can see them.</p></div>` : ""}` : ""}
-          ${d.kind === "number" ? `<label class="check"><input type="checkbox" data-k="auto"${d.auto ? " checked" : ""}> number new posts automatically (1, 2, 3…)</label>` : ""}
-          ${d.key ? `<p class="muted" style="margin:4px 0 0;font-size:14px">in embed codes this field is called <code>${esc(d.key)}</code></p>` : ""}
+          <label class="check"><input type="checkbox" data-k="open"${d.open ? " checked" : ""}> let me type new tags while writing</label>
+          ${(d.choices || []).length ? `<div class="hidetags"><p class="muted">hidden from lists:</p>
+            <div class="chips">${d.choices.map(c => `<label><input type="checkbox" data-k="hidden" value="${esc(c)}"${(d.hidden || []).some(h => h.toLowerCase() === c.toLowerCase()) ? " checked" : ""}>${esc(c)}</label>`).join("")}</div></div>` : ""}` : ""}
+          ${d.kind === "number" ? `<label class="check"><input type="checkbox" data-k="auto"${d.auto ? " checked" : ""}> number new posts automatically</label>` : ""}
+          ${d.key ? `<p class="muted" style="margin:4px 0 0;font-size:14px">key: <code>${esc(d.key)}</code></p>` : ""}
         </div>`
       )
       .join("")}
@@ -645,13 +643,11 @@ async function embedView(kind, which) {
 
   frame(
     "embed",
-    `<p>choose what to show on your site, check it in the preview, then copy the code into your page where it should appear.</p>
-    <div class="playground embedder">
+    `<div class="playground embedder">
       <form class="style-controls" id="eb" autocomplete="off"></form>
       <div class="style-preview"><iframe id="stage" title="preview of the embed"></iframe></div>
     </div>
     <h2>your embed code</h2>
-    <p class="muted">paste it into your page's html where the posts should go. it updates by itself when you write or edit here.${look ? ` for your look, also copy the css from the <a href="#style">style</a> tab.` : ` to change how it looks, try the <a href="#style">style</a> tab.`}</p>
     <textarea id="code" class="cssout" readonly style="min-height:90px"></textarea>
     <div class="toolbar"><button class="primary" id="copycode">copy embed code</button></div>`
   );
@@ -737,8 +733,7 @@ async function styleView() {
 
   frame(
     "style",
-    `<p>try out how your posts could look on your own site. the preview uses your real posts. when you like it, copy the css at the bottom into your site.</p>
-    <div class="playground">
+    `<div class="playground">
       <form class="style-controls" id="controls" autocomplete="off">
         <div class="savebar"><span id="lookstatus"></span>
           <button type="button" class="primary" id="savelook">save look</button>
@@ -748,10 +743,8 @@ async function styleView() {
           <option value="default">the default (archizzl style)</option>
           ${looks.map((l, i) => `<option value="${i}">${esc(l.name)}'s look</option>`).join("")}
         </select></label>
-        ${looks.length ? "" : `<p class="muted" style="font-size:14px;margin:0">other blogs' looks show up here once they make one.</p>`}
         ${groups.map(g => `<fieldset><legend>${esc(g)}</legend>${CONTROLS.filter(c => c.group === g).map(control).join("")}</fieldset>`).join("")}
         <fieldset class="site"><legend>your site (preview only)</legend>
-          <p class="muted">roughly what your page looks like around the posts. this isn't in the css.</p>
           ${SITE_CONTROLS.map(control).join("")}
         </fieldset>
       </form>
@@ -767,10 +760,9 @@ async function styleView() {
       </div>
     </div>
     <h2>your css</h2>
-    <p class="muted">paste this into your site's stylesheet, or inside <code>&lt;style&gt;…&lt;/style&gt;</code> in your page's <code>&lt;head&gt;</code>. it works with every embed code from this dashboard, and your site's own styles fill in anything you didn't set.${s.font === "atkinson" || s.font === "archizzl" ? ` Atkinson Hyperlegible is a web font: if your site doesn't have Calibri or Atkinson, also add <code>&lt;link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible&amp;display=swap"&gt;</code>.` : ""}</p>
+    ${s.font === "atkinson" || s.font === "archizzl" ? `<p class="muted">also add to your <code>&lt;head&gt;</code>: <code>&lt;link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible&amp;display=swap"&gt;</code></p>` : ""}
     <textarea id="css" class="cssout" readonly></textarea>
-    <div class="toolbar"><button class="primary" id="copycss">copy css</button><button id="resetstyle">back to the default</button></div>
-    <p class="muted" style="font-size:15px">saved looks also style your posts on <a href="/${esc(username)}" target="_blank">your page here</a> and on the front page.</p>`
+    <div class="toolbar"><button class="primary" id="copycss">copy css</button><button id="resetstyle">back to the default</button></div>`
   );
   app.onclick = null;
 
@@ -902,9 +894,9 @@ Read the guide first: ${origin}/agents.md
 My username is ${username} and my agent key is ${key}
 Ask me before publishing anything or changing my own site.`;
       showSnippet("your agent key", [
-        { label: "give your AI assistant this message", code: prompt, note: "fill in the link to your old blog. the key is only shown now: if you lose it, make a new one." },
+        { label: "message for your AI assistant", code: prompt },
         { label: "just the key", code: key },
-      ], `<p class="muted">anyone with the key can write, publish and delete posts and files as you, so treat it like a password. revoke it below when the agent's done.</p>`);
+      ], `<p class="muted">only shown once.</p>`);
     } catch (err) { toast(err.message, true); }
   };
 }
@@ -945,10 +937,8 @@ async function filesView() {
   frame(
     "files",
     `<div class="drop" id="drop">drop photos or files here, or <button id="pick">choose files</button>
-       <input id="filepick" type="file" multiple hidden>
-       <p class="muted">photos, PDFs and .md/.txt files, up to 25 MB. big photos are shrunk and their location data is removed.</p></div>
+       <input id="filepick" type="file" multiple hidden></div>
      <p><button id="import">turn a .md or .txt file into a post</button><input id="importfile" type="file" accept=".md,.markdown,.txt,text/plain,text/markdown" hidden></p>
-     <p class="muted">your files are public at <code>${esc(me.cdn)}</code></p>
      ${files.length ? `<ul class="list">${items}</ul>` : "<p>no files yet.</p>"}`
   );
 
@@ -990,11 +980,10 @@ async function filesView() {
     if (t.dataset.embed) {
       showSnippet(`embed ${f.name}`, [
         {
-          label: "embed (recommended)",
+          label: "embed",
           code: imageSnippet(f),
-          note: "shows the photo with its description and caption. change those here and every page updates.",
         },
-        { label: "plain image", code: imgTag(f), note: "for sites that don't allow &lt;script&gt; tags. the description is copied in now and won't update." },
+        { label: "plain image", code: imgTag(f) },
       ]);
     }
     if (t.dataset.del) {
@@ -1010,9 +999,9 @@ function describe(f) {
   d.innerHTML = `<h2>describe ${esc(f.name)}</h2>
     <img src="${esc(f.url)}" alt="" style="max-width:100%;max-height:220px;display:block;margin-bottom:10px">
     <form method="dialog" class="stack">
-      <label>description <span class="muted">(alt text: what's in the photo, for people who can't see it)</span>
+      <label>description
         <input name="alt" value="${esc(f.alt || "")}" placeholder="my dog asleep on a beach towel"></label>
-      <label>caption <span class="muted">(optional, shown under the photo. **bold**, *italics* and [links](https://…) work)</span>
+      <label>caption
         <input name="caption" value="${esc(f.caption || "")}"></label>
       <div class="toolbar"><button class="primary" value="save">save</button><button value="cancel" formnovalidate>cancel</button></div>
     </form>`;
@@ -1039,12 +1028,10 @@ function previewSite() {
       <button type="submit">${label}</button>
     </form>`;
   box.innerHTML = me.preview
-    ? `<p>your blog is up as its own website at <a href="${esc(me.preview)}" target="_blank" rel="noopener">${esc(bare(me.preview))}</a> ↗, in the look you saved in the <a href="#style">style</a> tab. search engines don't list it.</p>
+    ? `<p><a href="${esc(me.preview)}" target="_blank" rel="noopener">${esc(bare(me.preview))}</a> ↗</p>
       ${addressForm("change address")}
-      <p class="muted">if you change the address, the old one stops working.</p>
       <button type="button" data-off>turn off preview site</button>`
-    : `<p>try your blog out as its own website before you buy a domain. it shows your posts and photos in the look you saved in the <a href="#style">style</a> tab. pick its address:</p>
-      ${addressForm("turn on preview site")}`;
+    : addressForm("turn on preview site");
   const send = async (body, button, done) => {
     button.disabled = true;
     try {
@@ -1068,9 +1055,9 @@ function settingsView() {
     "settings",
     `<h2>about you</h2>
     <form id="about" class="stack">
-      <label>blog name <span class="muted">(shown in the sidebar on the front page and as your feed's title)</span> <input name="display_name" value="${esc(me.display_name)}" placeholder="${esc(username)}"></label>
+      <label>blog name <input name="display_name" value="${esc(me.display_name)}" placeholder="${esc(username)}"></label>
       <label>your site <input name="site_url" value="${esc(me.site_url)}" placeholder="https://you.neocities.org"></label>
-      <label>post address pattern <span class="muted">(optional) where each post lives on your site, for feed links. include {slug}.</span>
+      <label>post address pattern
         <input name="post_url_pattern" value="${esc(me.post_url_pattern)}" placeholder="https://you.neocities.org/blog/{slug}"></label>
       <button type="submit">save</button>
     </form>
@@ -1082,16 +1069,12 @@ function settingsView() {
     <div id="costs"><p class="muted">adding it up…</p></div>
 
     <h2>post fields</h2>
-    <p class="muted">your own tags and details for posts, like an emotion, a number, or where you wrote it. they show up in the post editor.</p>
     <div id="fields"></div>
-    <p class="muted" style="font-size:15px">renaming a tag doesn't rename it on posts that already have it.</p>
 
-    <h2>embedding and styling</h2>
-    <p>make the code for your site in the <a href="#embed">embed</a> tab: pick what to show, see it, copy it. try out looks for it in the <a href="#style">style</a> tab.</p>
-    <p>feeds for readers: <a href="${esc(me.feeds.rss)}" target="_blank">rss</a> · <a href="${esc(me.feeds.json)}" target="_blank">json feed</a></p>
+    <h2>feeds</h2>
+    <p><a href="${esc(me.feeds.rss)}" target="_blank">rss</a> · <a href="${esc(me.feeds.json)}" target="_blank">json feed</a></p>
 
     <h2>let an AI agent set up your blog</h2>
-    <p>an AI assistant (like Claude) can move your posts over from another blog, set up your tags, and write the code and styling for your own site. make it an agent key, then give it the key and a link to your old blog.</p>
     <form id="newkey" class="row" style="max-width:560px">
       <label>what's it for? <input name="label" placeholder="moving my squarespace posts" maxlength="60"></label>
       <button type="submit">make an agent key</button>
@@ -1104,7 +1087,6 @@ function settingsView() {
       <label>current password <input name="current" type="password" autocomplete="current-password" required></label>
       <label>new password <input name="next" type="password" autocomplete="new-password" minlength="8" required></label>
       <button type="submit">change password</button>
-      <p class="muted">this logs you out on your other devices.</p>
     </form>`
   );
   app.onclick = null;
