@@ -44,6 +44,16 @@ async function copy(text, what = "copied") {
 }
 
 // "No. 3 · tender, hopeful · the 14 bus stop": a post's field values in the blog's field order.
+// The first of a post's tags that's hidden from lists (settings → post fields), or "".
+function hiddenBy(values = {}) {
+  for (const d of me?.fields || []) {
+    if (d.kind !== "tags" || !d.hidden?.length) continue;
+    const tag = (values[d.key] || []).find(v => d.hidden.some(h => h.toLowerCase() === String(v).toLowerCase()));
+    if (tag) return tag;
+  }
+  return "";
+}
+
 function fieldSummary(values = {}) {
   return (me?.fields || [])
     .filter(d => values[d.key] !== undefined)
@@ -136,7 +146,8 @@ async function postsView() {
     .map(
       p => `<li>
         <div class="grow"><a href="#edit/${p.id}">${esc(p.title)}</a><time>${esc(p.date)}</time>
-          ${fieldSummary(p.fields) ? `<div class="muted">${esc(fieldSummary(p.fields))}</div>` : ""}</div>
+          ${fieldSummary(p.fields) ? `<div class="muted">${esc(fieldSummary(p.fields))}</div>` : ""}
+          ${p.published && hiddenBy(p.fields) ? `<div class="muted">hidden from lists (#${esc(hiddenBy(p.fields))})</div>` : ""}</div>
         ${p.published ? '<span class="live">published</span>' : '<span class="draft">draft</span>'}
         <div class="buttons">
           ${p.published ? `<button data-embed="${p.id}">embed code</button>` : ""}
@@ -474,7 +485,10 @@ function fieldsEditor() {
             <span class="buttons"><button type="button" data-move="-1" title="move up"${i ? "" : " disabled"}>↑</button><button type="button" data-move="1" title="move down"${i < defs.length - 1 ? "" : " disabled"}>↓</button><button type="button" class="danger" data-remove>remove</button></span>
           </div>
           ${d.kind === "tags" ? `<label>tags, separated by commas <input data-k="choices" value="${esc((d.choices || []).join(", "))}" placeholder="tender, restless, hopeful, giddy"></label>
-          <label class="check"><input type="checkbox" data-k="open"${d.open ? " checked" : ""}> let me type new tags while writing (they're added here)</label>` : ""}
+          <label class="check"><input type="checkbox" data-k="open"${d.open ? " checked" : ""}> let me type new tags while writing (they're added here)</label>
+          ${(d.choices || []).length ? `<div class="hidetags"><p class="muted">hide posts with these tags from lists:</p>
+            <div class="chips">${d.choices.map(c => `<label><input type="checkbox" data-k="hidden" value="${esc(c)}"${(d.hidden || []).some(h => h.toLowerCase() === c.toLowerCase()) ? " checked" : ""}>${esc(c)}</label>`).join("")}</div>
+            <p class="muted">their posts stay off your blog's page, the front page, feeds and embeds, unless someone asks for the tag (like <code>/${esc(username)}?tag=${esc((d.hidden || [])[0] || d.choices[0])}</code>, or an embed with <code>data-filter="${esc(d.key || "tags")}:${esc((d.hidden || [])[0] || d.choices[0])}"</code>). each post's own page still works. it's not private: anyone with the link can see them.</p></div>` : ""}` : ""}
           ${d.kind === "number" ? `<label class="check"><input type="checkbox" data-k="auto"${d.auto ? " checked" : ""}> number new posts automatically (1, 2, 3…)</label>` : ""}
           ${d.key ? `<p class="muted" style="margin:4px 0 0;font-size:14px">in embed codes this field is called <code>${esc(d.key)}</code></p>` : ""}
         </div>`
@@ -491,9 +505,15 @@ function fieldsEditor() {
     const d = defs[row.dataset.i];
     if (k === "auto") d.auto = ev.target.checked;
     else if (k === "open") d.open = ev.target.checked;
-    else if (k === "choices") d.choices = ev.target.value.split(",").map(s => s.trim()).filter(Boolean);
+    else if (k === "hidden") {
+      if (ev.type !== "change") return;
+      const v = ev.target.value;
+      d.hidden = (d.hidden || []).filter(h => h.toLowerCase() !== v.toLowerCase());
+      if (ev.target.checked) d.hidden.push(v);
+    } else if (k === "choices") d.choices = ev.target.value.split(",").map(s => s.trim()).filter(Boolean);
     else d[k] = ev.target.value;
-    if (k === "kind" && ev.type === "change") draw();
+    // Redraw when the kind changes, or when the tags are done being typed (for the hide checkboxes).
+    if ((k === "kind" || k === "choices") && ev.type === "change") draw();
   };
   box.onclick = async ev => {
     const t = ev.target;

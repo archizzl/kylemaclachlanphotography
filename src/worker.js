@@ -27,7 +27,7 @@ import { cleanLook } from "../public/app/stylekit.js";
 import { slugify } from "./rules.js";
 import { appBilling, costReport, loadCostData, nextRenewal, RATES, reportFor, storedNow } from "./costs.js";
 import { measuredByMonth, syncR2Usage, syncStatus } from "./r2usage.js";
-import { cleanFieldDefs, cleanPostFields, growChoices, listQuery, parseJson } from "./fields.js";
+import { cleanFieldDefs, cleanPostFields, growChoices, hiddenClause, listQuery, parseJson } from "./fields.js";
 import { adminLoginPage, adminPage, dashboardPage, loginPage, simplePage } from "./pages.js";
 import { cleanPreviewName, previewDomain, previewProblem, previewUrl, suggestedPreviewName } from "./preview.js";
 import { html, json, now, readJson, redirect } from "./util.js";
@@ -626,10 +626,12 @@ async function publicRoute(username, name, ext, env, url) {
   const opts = { origin: siteOrigin(env, url), cdnBase: base };
   // ?filter=<field>:<value> (repeatable) and ?sort=<field|date> (a leading - for descending).
   const q = listQuery(parseJson(user.fields_json, []), url.searchParams);
+  // Posts with a hidden tag stay out of lists and feeds unless the filter asks for that tag.
+  const hidden = hiddenClause(q.revealed.map(() => "?"));
   const recent = async (limit, offset = 0) =>
     (
-      await env.DB.prepare(`SELECT p.* FROM posts p WHERE p.user_id = ? AND p.published = 1${q.where} ORDER BY ${q.order} LIMIT ? OFFSET ?`)
-        .bind(user.id, ...q.binds, limit, offset)
+      await env.DB.prepare(`SELECT p.* FROM posts p WHERE p.user_id = ? AND p.published = 1${q.where}${hidden} ORDER BY ${q.order} LIMIT ? OFFSET ?`)
+        .bind(user.id, ...q.binds, ...q.revealed, limit, offset)
         .all()
     ).results;
 

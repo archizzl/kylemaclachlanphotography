@@ -770,3 +770,55 @@ test("bruteforce.: the hand-made photo site, newest photos first", async () => {
   assert.equal((await b("/api/preview", { method: "PUT", body: { on: true } })).status, 400);
   assert.equal((await visit("bruteforce")).status, 200);
 });
+
+test("hidden tags: their posts stay out of lists and feeds unless the tag is asked for", async () => {
+  await archie("/admin/users", { method: "POST", form: { username: "hider", display_name: "Hider", password: "hider-password-1" } });
+  const h = browser("23.0.0.1");
+  await h("/login", { method: "POST", form: { username: "hider", password: "hider-password-1" } });
+  // Hidden tags must be among the choices and take their spelling.
+  const saved = await (
+    await h("/api/fields", { method: "PUT", body: { fields: [{ name: "tags", kind: "tags", open: true, choices: ["Secret", "nyc"], hidden: ["secret", "not-a-tag"] }] } })
+  ).json();
+  assert.deepEqual(saved.fields[0].hidden, ["Secret"]);
+  await h("/api/posts", { method: "POST", body: { title: "Part One", date: "2033-01-01", published: 1, fields: { tags: ["secret"] } } });
+  await h("/api/posts", { method: "POST", body: { title: "Part Two", date: "2033-01-02", published: 1, fields: { tags: ["nyc", "Secret"] } } });
+  await h("/api/posts", { method: "POST", body: { title: "Out Loud", date: "2033-01-03", published: 1, fields: { tags: ["nyc"] } } });
+  const reader = browser("23.0.0.2");
+  const has = (text, ...titles) => titles.every(t => text.includes(t));
+  const none = (text, ...titles) => titles.every(t => !text.includes(t));
+
+  // The blog's page and the front page leave them out.
+  const blog = await (await reader("/hider")).text();
+  assert.ok(has(blog, "Out Loud") && none(blog, "Part One", "Part Two"));
+  assert.ok(none(await (await reader("/?hidden")).text(), "Part One", "Part Two"));
+  // Asking for the tag (any case) shows them; asking for another tag doesn't.
+  const secret = await (await reader("/hider?tag=SECRET")).text();
+  assert.ok(has(secret, "Part One", "Part Two") && none(secret, "Out Loud"));
+  const nyc = await (await reader("/hider?tag=nyc")).text();
+  assert.ok(has(nyc, "Out Loud") && none(nyc, "Part Two"));
+  // Each post's own page still works.
+  assert.equal((await reader("/hider/part-one")).status, 200);
+  assert.equal((await reader("/hider/part-one.json")).status, 200);
+
+  // posts.json, embeds and feeds: the same.
+  const titles = async q => (await (await reader(`/hider/posts.json${q}`)).json()).posts.map(p => p.title);
+  assert.deepEqual(await titles("?a"), ["Out Loud"]);
+  assert.deepEqual(await titles("?brief=1"), ["Out Loud"]);
+  assert.deepEqual(await titles("?filter=tags:secret"), ["Part Two", "Part One"]);
+  assert.deepEqual(await titles("?filter=tags:nyc"), ["Out Loud"]);
+  assert.deepEqual(await titles("?filter=tags:nyc&filter=tags:secret"), ["Part Two"]);
+  assert.ok(none(await (await reader("/hider/feed.xml")).text(), "Part One"));
+  assert.ok(none(await (await reader("/hider/feed.json")).text(), "Part One"));
+  assert.ok(has(await (await reader("/hider/feed.json?filter=tags:secret")).text(), "Part One"));
+
+  // A preview site too.
+  await h("/api/preview", { method: "PUT", body: { on: true, name: "hider" } });
+  const visit = path => previews.fetch(new Request(`https://hider.kylemaclachlanphotography.org${path}`), { ...env, SITE_ORIGIN: ORIGIN });
+  assert.ok(none(await (await visit("/")).text(), "Part One"));
+  assert.ok(has(await (await visit("/?tag=secret")).text(), "Part One", "Part Two"));
+  assert.equal((await visit("/part-two")).status, 200);
+
+  // Unhiding brings them back.
+  await h("/api/fields", { method: "PUT", body: { fields: [{ ...saved.fields[0], hidden: [] }] } });
+  assert.ok(has(await (await reader("/hider?again")).text(), "Part One", "Part Two", "Out Loud"));
+});

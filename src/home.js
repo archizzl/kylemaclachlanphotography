@@ -9,7 +9,7 @@
 import { escapeHtml as e } from "./util.js";
 import { postLink } from "./feeds.js";
 import { excerpt } from "./markdown.js";
-import { parseJson, publicFields } from "./fields.js";
+import { hiddenClause, parseJson, publicFields } from "./fields.js";
 import { scopedCss } from "../public/app/stylekit.js";
 
 export const HOME_PAGE_SIZE = 20;
@@ -34,6 +34,8 @@ export async function loadHome(env, { blog = "", page = 1, tag = "", slug = "" }
      WHERE p.published = 1 AND u.disabled = 0 AND (?1 = '' OR u.username = ?1) AND (?4 = '' OR p.slug = ?4)
        AND (?5 = '' OR EXISTS (SELECT 1 FROM json_each(p.fields_json) f, json_each(f.value) t
                               WHERE f.type = 'array' AND lower(t.value) = lower(?5)))
+       -- Posts with a hidden tag only show on their own page, or when the tag is asked for.
+       AND (?4 != '' OR (1${hiddenClause(["?5"])}))
      ORDER BY p.date DESC, p.updated_at DESC LIMIT ?2 OFFSET ?3`
   )
     .bind(only, HOME_PAGE_SIZE + 1, offset, slug, tag)

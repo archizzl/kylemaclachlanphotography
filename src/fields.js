@@ -1,11 +1,15 @@
 // Post fields each friend designs for their own blog, e.g.
 //   emotion  (tags: tender, restless, hopeful…)   number (auto-counting)   location (text)
 //
-// A definition: { key, name, kind: "tags" | "number" | "text", choices?: [..], open?: bool, auto?: bool }
+// A definition: { key, name, kind: "tags" | "number" | "text", choices?: [..], open?: bool, hidden?: [..], auto?: bool }
 //   key     the stable name used in embed codes (data-group="emotion") and stored values; set when
 //           the field is made, from its name, and never changed after (renaming only changes `name`)
 //   choices tags only: the allowed tags, in the order menus and groups show them
 //   open    tags only: any new tag can be typed while writing; it's added to `choices` when saved
+//   hidden  tags only: some of `choices`. Posts with one of these tags are left out of every list of
+//           posts (the front page, the blog's page and preview site, posts.json, feeds, embeds)
+//           unless the list asks for that tag (?tag=secret, ?filter=tags:secret). Each post's own
+//           page still works. It's a way to keep a series out of the way, not to make it private.
 //   auto    number only: new posts get the next number automatically
 //
 // A post's values: { [key]: ["tender", "hopeful"] | 12 | "the 14 bus stop" }
@@ -68,6 +72,13 @@ export function cleanFieldDefs(input, previous = []) {
       if (!choices.length && !open) return [null, `Give "${name}" at least one tag to choose from, or let new tags be typed while writing.`];
       def.choices = choices;
       if (open) def.open = true;
+      // Hidden tags must be among the choices; they take the choice's spelling.
+      const hidden = [];
+      for (const h of Array.isArray(raw.hidden) ? raw.hidden : []) {
+        const c = choices.find(x => x.toLowerCase() === oneLine(h, NAME_MAX).toLowerCase());
+        if (c && !hidden.includes(c)) hidden.push(c);
+      }
+      if (hidden.length) def.hidden = hidden;
     }
     if (kind === "number") def.auto = Boolean(raw.auto);
     out.push(def);
@@ -145,7 +156,24 @@ export function listQuery(defs, params) {
     const ex = `json_extract(p.fields_json, '$.${sk}')`;
     order = `(${ex} IS NULL), ${ex} ${desc ? "DESC" : "ASC"}, p.date DESC, p.id DESC`;
   }
-  return { where: where.length ? ` AND ${where.join(" AND ")}` : "", binds, order };
+  // Hidden tags this list asks for: posts with them are shown (see hiddenClause). Only real hidden
+  // tags count, so this rarely adds more than one value to the query.
+  const revealed = [];
+  for (const f of params.getAll("filter").slice(0, 90)) {
+    const d = byKey[f.slice(0, f.indexOf(":"))];
+    const v = f.slice(f.indexOf(":") + 1).toLowerCase();
+    if (d?.hidden?.some(h => h.toLowerCase() === v) && !revealed.includes(v)) revealed.push(v);
+  }
+  return { where: where.length ? ` AND ${where.join(" AND ")}` : "", binds, order, revealed };
+}
+
+// SQL that leaves out posts p with one of their blog's hidden tags, unless the list asks for that
+// tag. `reveal` is SQL for the values asked for, like ["?5"] or ["?", "?"] (empty for none).
+export function hiddenClause(reveal = []) {
+  return ` AND NOT EXISTS (
+    SELECT 1 FROM users hu, json_each(hu.fields_json) hd, json_each(hd.value, '$.hidden') hh,
+      json_each(p.fields_json, '$.' || json_extract(hd.value, '$.key')) ht
+    WHERE hu.id = p.user_id AND lower(ht.value) = lower(hh.value)${reveal.length ? ` AND lower(hh.value) NOT IN (${reveal.map(r => `lower(${r})`).join(", ")})` : ""})`;
 }
 
 // Open tag fields learn new tags: returns the definitions with any new tags added, or null if
