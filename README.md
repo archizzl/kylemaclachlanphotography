@@ -119,6 +119,18 @@ archie's own blog moved here on 2026-11-22, as user `archie`, using `scripts/imp
 
 Later deploys: `npm run deploy`.
 
+## test sites
+
+Friends can try out their own site at `<name>.kylemaclachlanphotography.org` before buying a domain: **bruteforce** and **brbtime** so far. It's a separate little Worker, `kmp-test-sites` (`sites/`), so deploying a test site never touches the blog.
+
+- Each site is plain files in `sites/public/<name>/`, with `index.html` as its home page. They're served at the subdomain as they are (`/about/` is `sites/public/<name>/about/index.html`). Pull in posts with the same embed codes a friend would use anywhere.
+- When a site gets its own domain, copy its folder to wherever it'll live; nothing in it depends on the subdomain.
+- Every response has `X-Robots-Tag: noindex`, so test sites stay out of search results.
+- Session cookies on the blog are host-only, so pages on a test subdomain can't see anyone's login.
+- **Add a site**: make `sites/public/<name>/`, add a `<name>.kylemaclachlanphotography.org` line to `routes` in `sites/wrangler.jsonc`, then deploy. The deploy creates the DNS record and certificate.
+- **Locally**: `npm run dev:sites` (or the `kmp-test-sites` launch config), then open http://bruteforce.localhost:8129 or http://brbtime.localhost:8129. Embeds read the live blog.
+- **Deploy**: `npm run deploy:sites`.
+
 ## going live (first time, for reference)
 
 ```bash
