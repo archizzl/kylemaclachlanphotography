@@ -13,7 +13,7 @@ One Cloudflare Worker (`blog-cdn`) on the Reaction Future Institute account, plu
     - `#tags` go to `/<username>?tag=<tag>`, that blog's posts with the tag. It matches any tags field, ignoring case, and shows "showing #tag (clear)".
   - The middle is one feed of every published post from every blog, newest first, 20 per page.
   - Along the bottom is a row of every uploaded photo. It's pinned to the window on desktop and sits at the end of the page on phones. Clicking a photo opens it bigger.
-  - Above the title "Kyle MacLachlan Photography" is a photo of Kyle MacLachlan, changing every 4 seconds, from the ones accepted sign-ups chose (below). There's none until the first sign-up is accepted.
+  - Above the title "Kyle MacLachlan Photography" is a photo of Kyle MacLachlan, changing every 4 seconds. The photos are in `kyle_photos`: accepting a sign-up adds its photo (below), and at `/admin` under "kyle maclachlan photos" Archie can add photos (with an optional "picked by" name) and remove any. Removing deletes the file. Added photos are shrunk to 1600px in the browser (`public/app/admin.js`).
   - Link previews (Open Graph): the front page, blog pages, post pages and `/signup` share `public/og.jpg` (1200×1236) with the page's title. Preview sites don't.
   - It's cached for 60 seconds.
 
@@ -22,7 +22,7 @@ One Cloudflare Worker (`blog-cdn`) on the Reaction Future Institute account, plu
   - The password is hashed when it arrives, and the hash is cleared once the request is decided. The photo is shrunk to 1600px in the browser (dropping a JPEG's location data) and stored as `_kyle/<random>.<ext>` in the bucket, so a waiting photo can't be found by guessing. Up to 10 MB; JPEG, PNG, WebP, GIF or AVIF, checked by content.
   - Spam limits: 3 requests per IP per day, 100 waiting at once, and a hidden field that only bots fill in.
   - Logging in while a request waits says "still waiting for Archie".
-  - At `/admin`, "sign-up requests" shows each one with its photo. **Accept** makes the account (blog name, first name, their password), and the username can be changed first. Their photo joins the front page's rotation. **Deny** deletes the photo.
+  - At `/admin`, "sign-up requests" shows each one with its photo. **Accept** makes the account (blog name, first name, their password), and the username can be changed first. Their photo joins the front page's rotation (`kyle_photos`, credited to their first name). **Deny** deletes the photo.
   - Kyle photos aren't anyone's files, so they're not in any blog's costs. They only show in the account-wide R2 totals at `/admin`.
 
 - **Friends** log in at `/login` and use the dashboard at `/dashboard` (`public/app/app.js`):

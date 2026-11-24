@@ -187,7 +187,28 @@ function signupsSection(signups, cdnBase) {
 </section>`;
 }
 
-export function adminPage({ users, billing, usage, signups = [], cdnBase = "" }, note = null) {
+// The photos of Kyle MacLachlan the front page cycles through: remove any, or add one.
+function kyleSection(kyle, cdnBase) {
+  return `<section id="kyle">
+<h2>kyle maclachlan photos</h2>
+${kyle.length ? `<ul class="kylephotos">${kyle
+    .map(
+      k => `<li>
+  <a href="${e(`${cdnBase}/${k.key}`)}" target="_blank" rel="noopener"><img src="${e(`${cdnBase}/${k.key}`)}" alt="${k.credit ? `picked by ${e(k.credit)}` : ""}" loading="lazy"></a>
+  ${k.credit ? `<span class="muted">${e(k.credit)}</span>` : ""}
+  <form method="post" action="/admin/kyle/${k.id}/delete"><button type="submit" class="danger">remove</button></form>
+</li>`
+    )
+    .join("")}</ul>` : "<p>none yet.</p>"}
+<form method="post" action="/admin/kyle" enctype="multipart/form-data" class="row" id="addkyle">
+  <label>photo <input type="file" name="photo" accept="image/jpeg,image/png,image/webp,image/gif,image/avif" required></label>
+  <label>picked by <input name="credit" maxlength="60"></label>
+  <button type="submit">add</button>
+</form>
+</section>`;
+}
+
+export function adminPage({ users, billing, usage, signups = [], cdnBase = "", kyle = [] }, note = null) {
   const locked = users.filter(u => u.locked_at);
   const thisMonth = billing.months.find(m => m.partial);
   const rows = users
@@ -252,6 +273,7 @@ ${noteHtml}
 </dl>
 ${signupsSection(signups, cdnBase)}
 ${lockedHtml}
+${kyleSection(kyle, cdnBase)}
 ${billingSection(billing)}
 <section>
 <h2>accounts</h2>
@@ -270,7 +292,8 @@ ${usageSection(usage)}
 </main>`,
     {
       bodyClass: "admin",
-      scripts: `<script>document.addEventListener("click", ev => { const b = ev.target.closest("[data-copy]"); if (b) navigator.clipboard.writeText(b.dataset.copy).then(() => { b.textContent = "copied"; }); });</script>`,
+      scripts: `<script>document.addEventListener("click", ev => { const b = ev.target.closest("[data-copy]"); if (b) navigator.clipboard.writeText(b.dataset.copy).then(() => { b.textContent = "copied"; }); });</script>
+<script src="/app/admin.js" type="module"></script>`,
     }
   );
 }

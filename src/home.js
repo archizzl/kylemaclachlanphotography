@@ -117,7 +117,7 @@ function longDate(d) {
 // The server picks one to show first; home.js moves through the rest every few seconds.
 function kyleHeader(kyle, cdnBase) {
   if (!kyle?.length) return "";
-  const list = kyle.map(k => ({ src: `${cdnBase}/${k.key}`, alt: `kyle maclachlan, picked by ${k.first_name}`, w: k.width, h: k.height }));
+  const list = kyle.map(k => ({ src: `${cdnBase}/${k.key}`, alt: k.credit ? `kyle maclachlan, picked by ${k.credit}` : "kyle maclachlan", w: k.width, h: k.height }));
   const first = list[Math.floor(Math.random() * list.length)];
   return `<img class="kyle" src="${e(first.src)}" alt="${e(first.alt)}"${first.w ? ` width="${first.w}" height="${first.h}"` : ""} data-kyle="${e(JSON.stringify(list))}">`;
 }

@@ -951,3 +951,50 @@ test("↗ goes to a blog's own site, else its site on this domain", async () => 
   const bf = (await env.DB.prepare("SELECT username, preview_host FROM users WHERE username = 'bruteforce'").first());
   assert.equal(subdomainUrl(env, bf), "https://bruteforce.kylemaclachlanphotography.org");
 });
+
+test("archie adds and removes the front page's photos of kyle at /admin", async () => {
+  const JPEG = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0, 16, 74, 70, 73, 70, 0, 1, 1, 0, 0, 1, 0, 1, 0, 0]);
+  const add = (photo, credit = "") => {
+    const f = new FormData();
+    f.set("photo", photo);
+    f.set("credit", credit);
+    f.set("width", "600");
+    f.set("height", "800");
+    return f;
+  };
+  const before = (await kylePhotosNow()).length;
+  // Only real photos, and only for archie.
+  const stranger = browser("27.0.0.1");
+  assert.equal((await stranger("/admin/kyle", { method: "POST", raw: add(new File([JPEG], "k.jpg", { type: "image/jpeg" })) })).status, 303);
+  const fake = await archie("/admin/kyle", { method: "POST", raw: add(new File(["<svg/>"], "k.jpg", { type: "image/jpeg" })) });
+  assert.equal(fake.status, 400);
+  assert.match(await fake.text(), /doesn&#39;t look like a photo/);
+
+  // Added: on the admin page and the front page.
+  const added = await archie("/admin/kyle", { method: "POST", raw: add(new File([JPEG], "k.jpg", { type: "image/jpeg" }), "Shelly") });
+  assert.equal(added.status, 200);
+  const rows = await kylePhotosNow();
+  assert.equal(rows.length, before + 1);
+  const mine = rows.at(-1);
+  assert.match(mine.key, /^_kyle\/[0-9a-f-]{36}\.jpg$/);
+  assert.equal(mine.credit, "Shelly");
+  assert.ok(await env.FILES.get(mine.key));
+  assert.ok((await (await archie("/admin")).text()).includes(`action="/admin/kyle/${mine.id}/delete"`));
+  const front = await (await browser("27.0.0.2")(`/?kyle${Math.random()}`)).text();
+  assert.ok(front.includes(`${CDN}/${mine.key}`));
+  assert.ok(front.includes("kyle maclachlan, picked by Shelly"));
+  // JSON for admin.js.
+  const viaJs = await archie("/admin/kyle", { method: "POST", raw: add(new File([JPEG], "k.jpg", { type: "image/jpeg" })), headers: { accept: "application/json" } });
+  assert.deepEqual(await viaJs.json(), { ok: true });
+
+  // Removed: gone from the list, the front page and the bucket.
+  for (const r of (await kylePhotosNow()).slice(before)) {
+    assert.match(await (await archie(`/admin/kyle/${r.id}/delete`, { method: "POST", form: {} })).text(), /removed\./);
+    assert.equal(await env.FILES.get(r.key), null);
+  }
+  assert.equal((await kylePhotosNow()).length, before);
+  assert.ok(!(await (await browser("27.0.0.3")(`/?kyle${Math.random()}`)).text()).includes(mine.key));
+  assert.equal((await archie(`/admin/kyle/${mine.id}/delete`, { method: "POST", form: {} })).status, 400);
+});
+
+const kylePhotosNow = async () => (await env.DB.prepare("SELECT * FROM kyle_photos ORDER BY created_at, id").all()).results;

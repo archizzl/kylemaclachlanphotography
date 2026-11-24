@@ -29,7 +29,7 @@ import { appBilling, costReport, loadCostData, nextRenewal, RATES, reportFor, st
 import { measuredByMonth, syncR2Usage, syncStatus } from "./r2usage.js";
 import { cleanFieldDefs, cleanPostFields, growChoices, hiddenClause, listQuery, parseJson } from "./fields.js";
 import { adminLoginPage, adminPage, dashboardPage, loginPage, signupPage, signupThanksPage, simplePage } from "./pages.js";
-import { acceptSignup, denySignup, pendingSignups, submitSignup, waitingFor } from "./signup.js";
+import { acceptSignup, addKylePhoto, denySignup, kylePhotos, pendingSignups, removeKylePhoto, submitSignup, waitingFor } from "./signup.js";
 import { cleanPreviewName, previewDomain, previewProblem, previewUrl, subdomainUrl, suggestedPreviewName } from "./preview.js";
 import { html, json, now, readJson, redirect } from "./util.js";
 
@@ -256,6 +256,18 @@ async function admin(path, method, request, env) {
     return adminView(env, { text: `added ${username}.`, password });
   }
 
+  // The front page's photos of Kyle MacLachlan. admin.js sends the add form as JSON-wanting fetch.
+  if (path === "/admin/kyle" && method === "POST") {
+    const note = await addKylePhoto(request, env);
+    if ((request.headers.get("accept") || "").includes("application/json")) return json(note.problem ? { error: note.text } : { ok: true }, note.problem ? 400 : 200);
+    return adminView(env, note, note.problem ? 400 : 200);
+  }
+  const km = path.match(/^\/admin\/kyle\/(\d+)\/delete$/);
+  if (km && method === "POST") {
+    const note = await removeKylePhoto(env, Number(km[1]));
+    return adminView(env, note, note.problem ? 400 : 200);
+  }
+
   const sm = path.match(/^\/admin\/signups\/(\d+)\/(accept|deny)$/);
   if (sm && method === "POST") {
     const form = await request.formData();
@@ -304,7 +316,10 @@ async function admin(path, method, request, env) {
 async function adminView(env, note = null, status = 200) {
   const users = await listUsers(env);
   const billing = appBilling(users.map(u => u.report));
-  return html(adminPage({ users, billing, usage: await accountUsage(env), signups: await pendingSignups(env), cdnBase: cdnBase(env) }, note), status);
+  return html(
+    adminPage({ users, billing, usage: await accountUsage(env), signups: await pendingSignups(env), cdnBase: cdnBase(env), kyle: await kylePhotos(env) }, note),
+    status
+  );
 }
 
 async function listUsers(env) {

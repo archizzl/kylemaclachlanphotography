@@ -1,8 +1,9 @@
 /*
  * Sign-ups: anyone can ask for a blog at /signup with their first name, a blog name, a password and
  * their favorite photo of Kyle MacLachlan. Archie accepts or denies each request at /admin.
- * Accepting makes the account (with the password they chose), and puts their photo in the
- * rotation above the front page's title. Denying deletes the photo.
+ * Accepting makes the account (with the password they chose), and adds their photo to the
+ * rotation above the front page's title (kyle_photos, which Archie can also add to and remove from
+ * at /admin). Denying deletes the photo.
  *
  * The password is hashed as soon as it arrives, and the hash is emptied once the request is
  * decided. While a request waits, its photo sits in the bucket under a random name
@@ -126,6 +127,9 @@ export async function acceptSignup(env, id, username) {
     .bind(name, s.blog_name, s.first_name, s.password_hash, t)
     .first();
   await env.DB.prepare("UPDATE signups SET status = 'accepted', username = ?, user_id = ?, password_hash = '', decided_at = ? WHERE id = ?").bind(name, user.id, t, id).run();
+  await env.DB.prepare("INSERT OR IGNORE INTO kyle_photos (key, width, height, credit, signup_id, created_at) VALUES (?, ?, ?, ?, ?, ?)")
+    .bind(s.photo_key, s.photo_width, s.photo_height, s.first_name, id, t)
+    .run();
   return { text: `accepted ${s.first_name} as ${name}.` };
 }
 
@@ -138,12 +142,45 @@ export async function denySignup(env, id) {
   return { text: `denied ${s.first_name}.` };
 }
 
-// The accepted photos, for the front page, oldest first.
+// The photos the front page cycles through, oldest first.
 export async function kylePhotos(env) {
-  const { results } = await env.DB.prepare(
-    "SELECT photo_key AS key, first_name, photo_width AS width, photo_height AS height FROM signups WHERE status = 'accepted' ORDER BY decided_at, id"
-  ).all();
+  const { results } = await env.DB.prepare("SELECT id, key, width, height, credit, created_at FROM kyle_photos ORDER BY created_at, id").all();
   return results;
+}
+
+// Archie adds a photo at /admin. Returns { text, problem? } for the admin page.
+export async function addKylePhoto(request, env) {
+  let form;
+  try {
+    form = await request.formData();
+  } catch {
+    return { text: "Something went wrong sending that. Try again.", problem: true };
+  }
+  const photo = form.get("photo");
+  if (!photo || typeof photo === "string" || !photo.size) return { text: "Choose a photo.", problem: true };
+  if (photo.size > MAX_PHOTO) return { text: "That photo is too big (10 MB at most).", problem: true };
+  const type = String(photo.type).toLowerCase();
+  const bytes = await photo.arrayBuffer();
+  if (!PHOTO_TYPES[type] || !contentMatches(type, bytes)) return { text: "That doesn't look like a photo. Use a JPEG, PNG, WebP, GIF or AVIF.", problem: true };
+  const key = `_kyle/${crypto.randomUUID()}.${PHOTO_TYPES[type]}`;
+  await env.FILES.put(key, bytes, { httpMetadata: { contentType: type, cacheControl: "public, max-age=31536000, immutable" } });
+  const dim = v => {
+    const n = Number(v);
+    return n > 0 && n < 100000 ? Math.round(n) : null;
+  };
+  await env.DB.prepare("INSERT INTO kyle_photos (key, width, height, credit, created_at) VALUES (?, ?, ?, ?, ?)")
+    .bind(key, dim(form.get("width")), dim(form.get("height")), oneLine(form.get("credit"), 60), now())
+    .run();
+  return { text: "added." };
+}
+
+// Takes a photo out of the rotation and deletes the file.
+export async function removeKylePhoto(env, id) {
+  const p = await env.DB.prepare("SELECT key FROM kyle_photos WHERE id = ?").bind(id).first();
+  if (!p) return { text: "That photo was already removed.", problem: true };
+  await env.FILES.delete(p.key);
+  await env.DB.prepare("DELETE FROM kyle_photos WHERE id = ?").bind(id).run();
+  return { text: "removed." };
 }
 
 // For the login page: a request still waiting under this username and password.
