@@ -34,8 +34,10 @@ One Cloudflare Worker (`blog-cdn`) on the Reaction Future Institute account, plu
   - **style**: a playground for how their posts could look on their own site.
     - It starts from the one built-in look, archizzl.com's style guide (`DEFAULT_LOOK` in `public/app/stylekit.js`). Friends can also start from any other blog's look; there are no other templates.
     - They can set things one by one: font, sizes, title style, dates, links, tag style, photo frames, spacing, cards, box colour. The writing settings apply to the whole embed, so tags and tag buttons always match the writing font.
-    - Checkboxes choose what the preview shows: latest posts, tag buttons, one post, a photo. It previews their real posts in a sandboxed page with a stand-in for their site's background, then gives CSS to copy.
-    - Each blog's look is saved on KMP (`users.look_json`, `PUT /api/look`, `GET /api/looks`) so other blogs can start from it. It never changes anyone's site: the CSS is still copy-paste.
+    - Checkboxes choose what the preview shows: latest posts, tag buttons, one post, a photo. It previews their real posts in a sandboxed page, then gives CSS to copy.
+    - The **page** settings (background, text colour, font) are the page around the posts: in the preview, and on the blog's own pages on KMP (`/<username>`, its posts and tag feeds, and its preview site). The front page, with every blog, never gets them, and they're never in the copied CSS.
+    - Every change **saves by itself** half a second later ("saving…", then "saved"). Starting from another look, or "back to the default", asks first because it replaces theirs. Unsaved edits from before autosave (kept in the browser) are saved on the first visit.
+    - The look is saved on KMP (`users.look_json`, `PUT /api/look`, `GET /api/looks`). It styles that blog's posts on the front page and its own pages, and other blogs can start from it. It never changes anyone's own site: there the CSS is still copy-paste.
   - **files**: drag-and-drop upload, copy link and delete. Photos also get **describe** (alt text and an optional caption) and **embed code** (a live embed, or a plain `<img>` for sites that block scripts). You can also import a `.md` or `.txt` file as a draft post.
   - **settings**:
     - blog name, site address, and an optional post address pattern (used for feed links);
