@@ -39,7 +39,6 @@ export function signupPage({ message = "", firstName = "", blogName = "" } = {})
   <p class="muted" id="username-note" hidden></p>
   <label>password <span class="muted">(at least 8 characters)</span> <input name="password" type="password" autocomplete="new-password" minlength="8" maxlength="200" required></label>
   <label>your favorite photo of kyle maclachlan <input name="photo" type="file" accept="image/jpeg,image/png,image/webp,image/gif,image/avif" required></label>
-  <p class="muted">if you're accepted, it goes in the rotation at the top of the front page.</p>
   <label class="trap" aria-hidden="true">leave this empty <input name="website" tabindex="-1" autocomplete="off"></label>
   <button type="submit">send</button>
 </form>
