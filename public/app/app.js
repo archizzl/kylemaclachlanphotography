@@ -579,13 +579,7 @@ async function costs() {
         <thead><tr><th>month</th><th>stored (average)</th><th>uploads</th><th>full price</th><th>storage cost</th>${u.domain ? "<th>domain</th>" : ""}<th>total</th></tr></thead>
         <tbody>${rows}</tbody>
         <tfoot><tr><td>all time</td><td></td><td>${t.uploads}</td><td>${money(t.fullPrice)}</td><td>${money(t.storageCharged)}</td>${u.domain ? `<td>${money(t.domain)}</td>` : ""}<td><b>${money(t.total)}</b></td></tr></tfoot>
-      </table></div>
-      ${skipped ? `<p class="muted" style="font-size:15px">${skipped} month${skipped === 1 ? "" : "s"} with nothing stored or paid aren't shown.</p>` : ""}
-      <p class="muted" style="font-size:15px">how this is worked out: your photos, files and published writing are stored with Cloudflare R2.
-        ${u.measuredThrough ? `storage and requests come from cloudflare's own measurements (up to ${esc(u.measuredThrough)}), split between blogs by who stores what. months marked "est." are estimated from your files instead.` : `these are estimates from your files until cloudflare's own measurements are synced.`}
-        "full price" is R2's list price: $${u.rates.storagePerGBMonth} per GB a month, $${u.rates.uploadsPerMillion} per million uploads and $${u.rates.readsPerMillion} per million reads.
-        every month the first ${u.rates.freeGBMonths} GB, ${(u.rates.freeUploads / 1e6).toFixed(0)} million uploads and ${(u.rates.freeReads / 1e6).toFixed(0)} million reads are free, shared by all of ${host}'s sites, so "storage cost" is your share of anything over that.
-        prices from <a href="${esc(u.rates.source)}" target="_blank" rel="noopener">cloudflare</a>, checked ${esc(u.rates.checked)}.</p>`;
+      </table></div>`;
   } catch (err) {
     box.innerHTML = `<p class="problem">${esc(err.message)}</p>`;
   }
@@ -1050,8 +1044,7 @@ function previewSite() {
       <p class="muted">if you change the address, the old one stops working.</p>
       <button type="button" data-off>turn off preview site</button>`
     : `<p>try your blog out as its own website before you buy a domain. it shows your posts and photos in the look you saved in the <a href="#style">style</a> tab. pick its address:</p>
-      ${addressForm("turn on preview site")}
-      <p class="muted">letters, numbers and hyphens. search engines won't list it.</p>`;
+      ${addressForm("turn on preview site")}`;
   const send = async (body, button, done) => {
     button.disabled = true;
     try {

@@ -119,14 +119,13 @@ function usageSection(usage) {
     .join("\n");
   return `<section>
 <h2>cloudflare r2, whole account</h2>
-<p class="muted">every bucket on the cloudflare account, so your other sites too. ${status} it updates daily; cloudflare only keeps about 13 weeks, so this site keeps its own copy.</p>
+<p class="muted">${status}</p>
 ${usage.buckets?.length ? `<p>by bucket, as of ${e(usage.buckets[0].date)}: ${usage.buckets
   .map(b => `${b.thisSite ? "<b>" : ""}${e(b.bucket)}${b.thisSite ? " (this site)</b>" : ""} ${size(b.stored_bytes)}`)
   .join(" · ")}</p>` : ""}
 ${problem}
 <form method="post" action="/admin/sync-usage"><button type="submit">sync from cloudflare now</button></form>
 ${rows ? `<table class="users usage"><thead><tr><th>month</th><th>source</th><th>stored (average)</th><th>writes (class A)</th><th>reads (class B)</th><th>full price</th><th>charged</th></tr></thead><tbody>${rows}</tbody></table>` : ""}
-<p class="muted">"charged" is what's over cloudflare's free 10 GB, 1M writes and 10M reads each month, at R2's list prices. it should match the R2 lines on the account's bill.</p>
 </section>`;
 }
 
@@ -159,7 +158,6 @@ function billingSection(billing) {
   const t = billing.allTime;
   return `<section>
 <h2>billing, whole app</h2>
-<p class="muted">every blog added together: each one's share of the blog bucket's R2 (after cloudflare's free allowance) plus the domains you pay for. "running total" is everything up to and including that month. it doesn't include your other sites' buckets (they're in the R2 table at the bottom) or a Workers plan, if you pay for one.</p>
 ${rows
   ? `<table class="users usage"><thead><tr><th>month</th><th>storage</th><th>domains</th><th>total</th><th>running total</th><th>storage at full price</th></tr></thead>
 <tbody>${rows}</tbody>
@@ -207,17 +205,12 @@ export function adminPage({ users, billing, usage, signups = [], cdnBase = "" },
   <td class="actions">
     ${passwordForm(u, { label: u.locked_at ? "set &amp; unlock" : "set password" })}
     <details>
-      <summary>their domain · ${u.disabled ? "re-enable" : "disable"} account</summary>
-      <p class="muted hint">a domain you pay for them through reaction future institute (it's added to their costs):</p>
       <form method="post" action="/admin/users/${u.id}/domain" class="domain">
         <input name="domain" value="${e(u.domain || "")}" placeholder="their-domain.com" aria-label="domain for ${e(u.username)}">
         <input name="cost" value="${u.domain_cost_cents ? (u.domain_cost_cents / 100).toFixed(2) : ""}" placeholder="$/year" aria-label="yearly cost" style="width:80px">
         <input name="since" type="date" value="${e(u.domain_since || "")}" aria-label="first paid on" style="width:140px">
         <button type="submit">save domain</button>
       </form>
-      <p class="muted hint">${u.disabled
-        ? "this account is disabled. re-enabling lets them log in again and brings their posts back."
-        : "disabling stops them logging in and hides their posts, blog page and feeds. their files stay up. you can re-enable it anytime."}</p>
       <form method="post" action="/admin/users/${u.id}/disabled">
         <input type="hidden" name="disabled" value="${u.disabled ? 0 : 1}">
         <button type="submit">${u.disabled ? "re-enable account" : "disable account"}</button>
@@ -267,7 +260,6 @@ ${lockedHtml}
 ${billingSection(billing)}
 <section>
 <h2>accounts</h2>
-<p class="muted">type a new password and press set (or leave it blank and one is made for you). it logs them out everywhere and revokes their agent keys.</p>
 ${users.length ? `<table class="users"><thead><tr><th>blog</th><th>status</th><th>posts</th><th>files on this site</th><th>cost, all time</th><th>password and more</th></tr></thead><tbody>${rows}</tbody></table>` : "<p>no one yet.</p>"}
 </section>
 <section>
