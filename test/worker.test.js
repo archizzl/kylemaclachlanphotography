@@ -551,7 +551,7 @@ test("blog pages: /<blog>, #tag feeds, single posts, and tidy 404s", async () =>
 
   // The blog's own feed, with archizzl-style #tag links and post links.
   const feed = await (await reader("/tagger?a")).text();
-  assert.match(feed, /<title>Tag Blog! · kyle maclachlan photography<\/title>/);
+  assert.match(feed, /<title>Tag Blog! · Kyle MacLachlan Photography<\/title>/);
   assert.match(feed, /<a href="\/tagger\/in-nyc">In NYC<\/a>/);
   assert.match(feed, /<a class="kmp-tag" href="\/tagger\?tag=NYC"[^>]*>NYC<\/a>/);
   assert.ok(!feed.includes("Secret"));
@@ -625,7 +625,8 @@ test("KMP's own pages show each post in its blog's saved look; blogs without one
   for (const path of ["/?mix", "/styled?mix", "/styled/styled-post?mix"]) {
     const page = await (await reader(path)).text();
     assert.match(page, /<style id="looks">[\s\S]*\.kmp-embed\[data-blog="styled"\] \{\n  font-family: "Comic Sans MS"/, path);
-    assert.ok(!page.includes("background: #fffbea"), path); // the site stand-in isn't used here: no box behind posts
+    // The page colour is the blog's own: on its page and posts, never on the front page.
+    assert.equal(/<style id="page">\nbody \{ background: #fffbea;/.test(page), path !== "/?mix", path);
     assert.match(page, /\.kmp-embed\[data-blog="styled"\] \.kmp-title \{\n  color: #ff7eb6;/, path);
     assert.match(page, /<div class="kmp-embed styled" data-blog="styled">/, path);
   }
@@ -633,6 +634,11 @@ test("KMP's own pages show each post in its blog's saved look; blogs without one
   assert.match(mixed, /<div class="kmp-embed" data-blog="plain">/); // no saved look: plain, no card
   assert.ok(!/data-blog="plain"\] \{/.test(mixed));
   assert.equal((await (await reader("/plain?x")).text()).includes('<style id="looks">'), false);
+  assert.equal((await (await reader("/plain?y")).text()).includes('<style id="page">'), false);
+  // A preview site gets the page colour too.
+  await st("/api/preview", { method: "PUT", body: { on: true, name: "styledsite" } });
+  const preview = await (await previews.fetch(new Request("https://styledsite.kylemaclachlanphotography.org/?p"), { ...env, SITE_ORIGIN: ORIGIN })).text();
+  assert.match(preview, /<style id="page">\nbody \{ background: #fffbea;/);
 });
 
 test("preview addresses: offered from the blog name, cleaned when typed, and only preview hostnames count", () => {
@@ -897,7 +903,7 @@ test("sign-ups: a request waits for archie, who accepts (account + front page ph
   // Dale's photo is now above the front page's title.
   const front = await (await visitor("/?k1")).text();
   assert.match(front, new RegExp(`<img class="kyle" src="${CDN}/${row.photo_key}" alt="kyle maclachlan, picked by Dale" width="800" height="1000" data-kyle=`));
-  assert.ok(front.indexOf('class="kyle"') < front.indexOf("kyle maclachlan photography</a></h1>"));
+  assert.ok(front.indexOf('class="kyle"') < front.indexOf("Kyle MacLachlan Photography</a></h1>"));
 
   // Deny Audrey: the photo is deleted and the username is free again.
   const audreyKey = (await env.DB.prepare("SELECT photo_key FROM signups WHERE id = ?").bind(id2).first()).photo_key;
@@ -916,7 +922,7 @@ test("link previews: KMP's pages share the site photo; preview sites don't", asy
   const reader = browser("25.0.0.1");
   const front = await (await reader("/?og")).text();
   assert.match(front, /<meta property="og:image" content="https?:\/\/[^"]+\/og\.jpg">/);
-  assert.match(front, /<meta property="og:title" content="kyle maclachlan photography">/);
+  assert.match(front, /<meta property="og:title" content="Kyle MacLachlan Photography">/);
   assert.match(front, /<meta name="twitter:card" content="summary_large_image">/);
   assert.match(await (await reader("/tagger?og")).text(), /<meta property="og:title" content="Tag Blog!">/);
   assert.match(await (await reader("/tagger/at-work?og")).text(), /<meta property="og:title" content="At Work">/);

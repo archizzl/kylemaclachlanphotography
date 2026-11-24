@@ -683,17 +683,46 @@ async function embedView(kind, which) {
 
 // Your saved look, or the archizzl default if you haven't made one.
 const myLook = () => (me.look && Object.keys(me.look).length ? { ...me.look } : { ...DEFAULT_LOOK });
+// Before looks saved themselves, unsaved edits were kept in this browser. The first visit picks
+// them up and saves them.
 const DRAFT_KEY = `kmp-look-draft-${username}`;
-function loadDraft() {
-  try { return JSON.parse(localStorage.getItem(DRAFT_KEY)); } catch { return null; }
-}
-function setDraft(look) {
-  try { look ? localStorage.setItem(DRAFT_KEY, JSON.stringify(look)) : localStorage.removeItem(DRAFT_KEY); } catch {}
+function takeOldDraft() {
+  try {
+    const draft = JSON.parse(localStorage.getItem(DRAFT_KEY));
+    localStorage.removeItem(DRAFT_KEY);
+    return draft && typeof draft === "object" ? draft : null;
+  } catch { return null; }
 }
 const sameLook = (a, b) => JSON.stringify(Object.entries(a).filter(([, v]) => v).sort()) === JSON.stringify(Object.entries(b).filter(([, v]) => v).sort());
 
+// Looks save themselves a moment after each change.
+let lookTimer = null;
+let lookPending = null;
+async function saveLook(look, onStatus) {
+  lookPending = look;
+  clearTimeout(lookTimer);
+  onStatus?.("saving…");
+  lookTimer = setTimeout(async () => {
+    const send = lookPending;
+    lookPending = null;
+    try {
+      me.look = (await api("look", { method: "PUT", body: { look: send } })).look;
+      if (!lookPending) onStatus?.("saved");
+    } catch (err) {
+      onStatus?.("not saved", true);
+      toast(err.message, true);
+    }
+  }, 500);
+}
+
+// Closing the page right after a change still saves it.
+window.addEventListener("pagehide", () => {
+  if (!lookPending) return;
+  fetch("/api/look", { method: "PUT", keepalive: true, headers: { "x-kmp": "1", "content-type": "application/json" }, body: JSON.stringify({ look: lookPending }) });
+});
+
 async function styleView() {
-  const draft = loadDraft();
+  const draft = takeOldDraft();
   let s = draft || myLook();
   const [{ posts }, { files }, { looks }] = await Promise.all([api("posts"), api("files"), api("looks")]);
   const published = posts.filter(p => p.published);
@@ -726,16 +755,14 @@ async function styleView() {
     "style",
     `<div class="playground">
       <form class="style-controls" id="controls" autocomplete="off">
-        <div class="savebar"><span id="lookstatus"></span>
-          <button type="button" class="primary" id="savelook">save look</button>
-          <button type="button" id="discard">discard changes</button></div>
+        <div class="savebar"><span id="lookstatus" class="muted">${me.look ? "saved" : ""}</span></div>
         <label>start from <select id="preset">
           <option value="">choose…</option>
           <option value="default">the default (archizzl style)</option>
           ${looks.map((l, i) => `<option value="${i}">${esc(l.name)}'s look</option>`).join("")}
         </select></label>
         ${groups.map(g => `<fieldset><legend>${esc(g)}</legend>${CONTROLS.filter(c => c.group === g).map(control).join("")}</fieldset>`).join("")}
-        <fieldset class="site"><legend>your site (preview only)</legend>
+        <fieldset class="site"><legend>page</legend>
           ${SITE_CONTROLS.map(control).join("")}
         </fieldset>
       </form>
@@ -789,6 +816,15 @@ async function styleView() {
   apply();
 
   const controls = $("#controls");
+  const status = (text, bad = false) => {
+    const el = $("#lookstatus");
+    if (!el) return;
+    el.textContent = text;
+    el.className = bad ? "problem" : "muted";
+  };
+  const save = () => saveLook({ ...s }, status);
+  if (draft && !sameLook(draft, myLook())) save();
+
   controls.addEventListener("input", ev => {
     const t = ev.target;
     if (t.id === "preset") return;
@@ -801,19 +837,21 @@ async function styleView() {
       s[t.dataset.key] = t.value;
     } else return;
     apply();
-    setDraft(s);
-    status();
+    save();
   });
-  $("#preset").onchange = ev => {
+  // Starting from another look replaces this one, so ask first.
+  const replaceWith = async (from, what) => {
+    if (!sameLook(s, from) && !confirm(`Replace your look with ${what}?`)) return false;
+    s = { ...Object.fromEntries(Object.keys(s).map(k => [k, ""])), ...from };
+    me.look = s;
+    await saveLook({ ...s }, status);
+    styleView();
+    return true;
+  };
+  $("#preset").onchange = async ev => {
     const v = ev.target.value;
     const from = v === "default" ? DEFAULT_LOOK : looks[Number(v)]?.look;
-    if (!from) return;
-    if (dirty() && !confirm(`Start from ${v === "default" ? "the default look" : `${looks[Number(v)].name}'s look`}? Your unsaved changes will be replaced.`)) {
-      ev.target.value = "";
-      return;
-    }
-    setDraft({ ...s, ...Object.fromEntries(Object.keys(s).map(k => [k, ""])), ...from }); // a draft until saved
-    styleView();
+    if (!from || !(await replaceWith(from, v === "default" ? "the default" : `${looks[Number(v)].name}'s look`))) ev.target.value = "";
   };
   $(".showwhat").addEventListener("change", ev => {
     const k = ev.target.dataset.show;
@@ -823,34 +861,7 @@ async function styleView() {
     load();
   });
   $("#copycss").onclick = () => copy(cssBox.value, "css copied");
-  $("#resetstyle").onclick = () => {
-    setDraft({ ...DEFAULT_LOOK });
-    styleView();
-  };
-
-  // Saved or not: the status line, and which buttons make sense.
-  const dirty = () => !sameLook(s, myLook());
-  function status() {
-    const d = dirty();
-    $("#lookstatus").textContent = d ? "unsaved changes" : me.look ? "saved" : "the default (not saved yet)";
-    $("#lookstatus").className = d ? "problem" : "muted";
-    $("#discard").hidden = !d;
-    $("#savelook").disabled = !d && Boolean(me.look);
-  }
-  $("#savelook").onclick = async () => {
-    try {
-      me.look = (await api("look", { method: "PUT", body: { look: s } })).look;
-      setDraft(null);
-      status();
-      toast("look saved. your page here and the front page show it within a minute.");
-    } catch (err) { toast(err.message, true); }
-  };
-  $("#discard").onclick = () => {
-    if (!confirm("Discard your unsaved changes?")) return;
-    setDraft(null);
-    styleView();
-  };
-  status();
+  $("#resetstyle").onclick = () => replaceWith({ ...DEFAULT_LOOK }, "the default");
 }
 
 // ---- agent keys ----

@@ -33,7 +33,7 @@ export function signupPage({ message = "", firstName = "", blogName = "", origin
     "sign up",
     `<main class="narrow">
 <h1>sign up</h1>
-<p class="muted">kyle maclachlan photography blog cms request form</p>
+<p class="muted">Kyle MacLachlan Photography blog cms request form</p>
 <p class="problem" role="alert"${message ? "" : " hidden"}>${e(message)}</p>
 <form method="post" action="/signup" enctype="multipart/form-data" class="stack" id="signup">
   <label>first name <input name="first_name" autocomplete="given-name" maxlength="60" required value="${e(firstName)}"></label>
@@ -45,7 +45,7 @@ export function signupPage({ message = "", firstName = "", blogName = "", origin
   <button type="submit">send</button>
 </form>
 </main>`,
-    { bodyClass: "signup", scripts: `<script src="/app/signup.js" type="module"></script>`, head: origin ? ogTags(origin, "sign up · kyle maclachlan photography") : "" }
+    { bodyClass: "signup", scripts: `<script src="/app/signup.js" type="module"></script>`, head: origin ? ogTags(origin, "sign up · Kyle MacLachlan Photography") : "" }
   );
 }
 

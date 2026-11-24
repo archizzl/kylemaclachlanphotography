@@ -64,7 +64,8 @@ export const CONTROLS = [
   { group: "boxes and quotes", key: "boxFill", label: "[[box]] fill", type: "color" },
 ];
 
-// Stand-ins for the person's own page, for the preview only (never in the CSS).
+// The page around the posts: in the style tab's preview, and on the blog's own pages on KMP (its
+// page, posts and tag feeds, and its preview site), but never in the copied CSS or the front page.
 export const SITE_CONTROLS = [
   { key: "siteBg", label: "background", type: "color", def: "#ffffff" },
   { key: "siteText", label: "text", type: "color", def: "#000000" },

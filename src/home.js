@@ -10,7 +10,7 @@ import { escapeHtml as e } from "./util.js";
 import { postLink } from "./feeds.js";
 import { excerpt } from "./markdown.js";
 import { hiddenClause, parseJson, publicFields } from "./fields.js";
-import { scopedCss } from "../public/app/stylekit.js";
+import { cleanLook, scopedCss, siteFontStack } from "../public/app/stylekit.js";
 import { kylePhotos } from "./signup.js";
 
 export const HOME_PAGE_SIZE = 20;
@@ -18,7 +18,7 @@ export const HOME_PAGE_SIZE = 20;
 export async function loadHome(env, { blog = "", page = 1, tag = "", slug = "" } = {}) {
   const offset = (page - 1) * HOME_PAGE_SIZE;
   const { results: blogs } = await env.DB.prepare(
-    `SELECT u.username, u.display_name, u.site_url, u.preview_host,
+    `SELECT u.username, u.display_name, u.site_url, u.preview_host, u.look_json,
        (SELECT COUNT(*) FROM posts p WHERE p.user_id = u.id AND p.published = 1) AS posts,
        (SELECT COUNT(*) FROM files f WHERE f.user_id = u.id AND f.deleted_at IS NULL AND f.content_type LIKE 'image/%') AS photos
      FROM users u WHERE u.disabled = 0
@@ -52,6 +52,7 @@ export async function loadHome(env, { blog = "", page = 1, tag = "", slug = "" }
   return {
     blogs: active,
     blogExists: Boolean(found),
+    look: found ? parseJson(found.look_json, {}) : {},
     only,
     page,
     tag,
@@ -92,6 +93,21 @@ function looksCss(posts) {
   return `<style id="looks">\n${css}\n</style>`;
 }
 
+// On one blog's own pages (its page here, its posts and tag feeds, and its preview site), the
+// look's page settings colour the whole page. The front page, with every blog on it, stays plain.
+// Values were checked when saved and again by cleanLook, so they can't break out of the CSS.
+function pageCss(look) {
+  const l = cleanLook(look);
+  const body = [l.siteBg && `background: ${l.siteBg};`, l.siteText && `color: ${l.siteText};`, l.siteFont && `font-family: ${siteFontStack(l.siteFont)};`].filter(Boolean);
+  if (!body.length) return "";
+  return `<style id="page">
+body { ${body.join(" ")} }
+${l.siteBg ? `.photos { background: ${l.siteBg}; }
+` : ""}.masthead, .photos, .sidebar { border-color: currentColor; }
+h1 a, h1 a:visited { color: inherit; }
+</style>`;
+}
+
 function longDate(d) {
   const t = new Date(`${d}T12:00:00Z`);
   return isNaN(t) ? d : t.toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric", timeZone: "UTC" });
@@ -109,7 +125,7 @@ function kyleHeader(kyle, cdnBase) {
 // Link previews (Open Graph) for KMP's own pages: the site's photo (public/og.jpg) and the page's title.
 export function ogTags(origin, title) {
   return `<meta property="og:type" content="website">
-<meta property="og:site_name" content="kyle maclachlan photography">
+<meta property="og:site_name" content="Kyle MacLachlan Photography">
 <meta property="og:title" content="${e(title)}">
 <meta property="og:image" content="${e(`${origin}/og.jpg`)}">
 <meta property="og:image:width" content="1200">
@@ -117,7 +133,7 @@ export function ogTags(origin, title) {
 <meta name="twitter:card" content="summary_large_image">`;
 }
 
-export function homePage({ blogs, only, page, tag, slug, posts, more, photos, kyle = [] }, { cdnBase, site = null, origin = "" }) {
+export function homePage({ blogs, only, page, tag, slug, posts, more, photos, kyle = [], look = {} }, { cdnBase, site = null, origin = "" }) {
   const here = blogs.find(b => b.username === only) || (only ? { username: only, display_name: posts[0]?.display_name || "" } : null);
   // On a preview site the blog lives at / and its posts at /<post>; its stylesheet and script still
   // come from the main site.
@@ -144,7 +160,7 @@ export function homePage({ blogs, only, page, tag, slug, posts, more, photos, ky
     : `<aside class="sidebar">
 <header class="masthead">
   ${kyleHeader(kyle, cdnBase)}
-  <h1><a href="/">kyle maclachlan photography</a></h1>
+  <h1><a href="/">Kyle MacLachlan Photography</a></h1>
   <a class="black_button" href="/login">log in</a> <a class="signup" href="/signup">sign up</a>
 </header>
 <nav class="blogs" aria-label="blogs">
@@ -213,14 +229,15 @@ ${
   site
     ? `<title>${single ? `${e(posts[0].title)} · ` : tag ? `#${e(tag)} · ` : ""}${e(name(here))}</title>
 <meta name="robots" content="noindex">`
-    : `<title>${pageTitle}kyle maclachlan photography</title>
+    : `<title>${pageTitle}Kyle MacLachlan Photography</title>
 <meta name="description" content="writing and photos from a few friends' blogs, all in one place.">
-${ogTags(origin, single ? posts[0].title : here ? name(here) : "kyle maclachlan photography")}`
+${ogTags(origin, single ? posts[0].title : here ? name(here) : "Kyle MacLachlan Photography")}`
 }
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&display=swap">
 <link rel="stylesheet" href="${e(asset("/app/home.css"))}">
 ${looksCss(posts)}
+${only ? pageCss(look) : ""}
 ${
   site
     ? `</head>
