@@ -13,7 +13,7 @@ One Cloudflare Worker (`blog-cdn`) on the Reaction Future Institute account, plu
     - `#tags` go to `/<username>?tag=<tag>`, that blog's posts with the tag. It matches any tags field, ignoring case, and shows "showing #tag (clear)".
   - The middle is one feed of every published post from every blog, newest first, 20 per page.
   - Along the bottom is a row of every uploaded photo. It's pinned to the window on desktop and sits at the end of the page on phones. Clicking a photo opens it bigger.
-  - Above the title "Kyle MacLachlan Photography" is a photo of Kyle MacLachlan, changing every 4 seconds. The photos are in `kyle_photos`: accepting a sign-up adds its photo (below), and at `/admin` under "kyle maclachlan photos" Archie can add photos (with an optional "picked by" name) and remove any. Removing deletes the file. Added photos are shrunk to 1600px in the browser (`public/app/admin.js`).
+  - Above the title "Kyle MacLachlan Photography" is a photo of Kyle MacLachlan, picked at random on each page load and kept while the page is open. The pick happens in the browser, because the page is cached for a minute. The photos are in `kyle_photos`: accepting a sign-up adds its photo (below), and at `/admin` under "kyle maclachlan photos" Archie can add photos (with an optional "picked by" name) and remove any. Removing deletes the file. Added photos are shrunk to 1600px in the browser (`public/app/admin.js`).
   - Link previews (Open Graph): the front page, blog pages, post pages and `/signup` share `public/og.jpg` (1200×1236) with the page's title. Preview sites don't.
   - It's cached for 60 seconds.
 

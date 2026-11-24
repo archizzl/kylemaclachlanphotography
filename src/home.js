@@ -113,13 +113,18 @@ function longDate(d) {
   return isNaN(t) ? d : t.toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric", timeZone: "UTC" });
 }
 
-// Above the site's name: the photos of Kyle MacLachlan that accepted sign-ups chose, one at a time.
-// The server picks one to show first; home.js moves through the rest every few seconds.
+// Above the site's name: one of the photos of Kyle MacLachlan, picked at random on each page load
+// and kept while the page is open. The page is cached for a minute, so the pick happens in the
+// browser (the script runs before the image loads, so only one photo downloads). Without
+// JavaScript, the server's pick shows.
 function kyleHeader(kyle, cdnBase) {
   if (!kyle?.length) return "";
   const list = kyle.map(k => ({ src: `${cdnBase}/${k.key}`, alt: k.credit ? `kyle maclachlan, picked by ${k.credit}` : "kyle maclachlan", w: k.width, h: k.height }));
   const first = list[Math.floor(Math.random() * list.length)];
-  return `<img class="kyle" src="${e(first.src)}" alt="${e(first.alt)}"${first.w ? ` width="${first.w}" height="${first.h}"` : ""} data-kyle="${e(JSON.stringify(list))}">`;
+  const img = k => `<img class="kyle" src="${e(k.src)}" alt="${e(k.alt)}"${k.w ? ` width="${k.w}" height="${k.h}"` : ""}>`;
+  if (list.length === 1) return img(first);
+  const json = JSON.stringify(list).replace(/</g, "\\u003c");
+  return `<script>(function (l) { var k = l[Math.floor(Math.random() * l.length)], i = document.createElement("img"); i.className = "kyle"; i.src = k.src; i.alt = k.alt; if (k.w) { i.width = k.w; i.height = k.h; } document.currentScript.replaceWith(i); })(${json});</script><noscript>${img(first)}</noscript>`;
 }
 
 // Link previews (Open Graph) for KMP's own pages: the site's photo (public/og.jpg) and the page's title.

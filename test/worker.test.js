@@ -902,7 +902,7 @@ test("sign-ups: a request waits for archie, who accepts (account + front page ph
 
   // Dale's photo is now above the front page's title.
   const front = await (await visitor("/?k1")).text();
-  assert.match(front, new RegExp(`<img class="kyle" src="${CDN}/${row.photo_key}" alt="kyle maclachlan, picked by Dale" width="800" height="1000" data-kyle=`));
+  assert.match(front, new RegExp(`<img class="kyle" src="${CDN}/${row.photo_key}" alt="kyle maclachlan, picked by Dale" width="800" height="1000">`));
   assert.ok(front.indexOf('class="kyle"') < front.indexOf("Kyle MacLachlan Photography</a></h1>"));
 
   // Deny Audrey: the photo is deleted and the username is free again.
@@ -983,6 +983,8 @@ test("archie adds and removes the front page's photos of kyle at /admin", async 
   const front = await (await browser("27.0.0.2")(`/?kyle${Math.random()}`)).text();
   assert.ok(front.includes(`${CDN}/${mine.key}`));
   assert.ok(front.includes("kyle maclachlan, picked by Shelly"));
+  // With several, the browser picks one per load: they're listed in a script, with a no-script fallback.
+  assert.match(front, /<script>\(function \(l\) \{ var k = l\[Math\.floor\(Math\.random\(\) \* l\.length\)\][^<]*<\/script><noscript><img class="kyle"/);
   // JSON for admin.js.
   const viaJs = await archie("/admin/kyle", { method: "POST", raw: add(new File([JPEG], "k.jpg", { type: "image/jpeg" })), headers: { accept: "application/json" } });
   assert.deepEqual(await viaJs.json(), { ok: true });
