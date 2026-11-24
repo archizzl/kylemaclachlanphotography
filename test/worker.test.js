@@ -6,7 +6,7 @@ import assert from "node:assert/strict";
 import { readFileSync, readdirSync } from "node:fs";
 import { getPlatformProxy } from "wrangler";
 import worker from "../src/worker.js";
-import previews, { nameFromHost, previewName } from "../src/preview.js";
+import previews, { cleanPreviewName, nameFromHost, suggestedPreviewName } from "../src/preview.js";
 
 const ORIGIN = "https://kylemaclachlanphotography.org";
 const CDN = "https://cdn.kylemaclachlanphotography.org";
@@ -631,13 +631,22 @@ test("KMP's own pages show each post in its blog's saved look; blogs without one
   assert.equal((await (await reader("/plain?x")).text()).includes('<style id="looks">'), false);
 });
 
-test("preview names come from the blog name, and only preview hostnames count", () => {
-  assert.equal(previewName({ username: "bruteforce", display_name: "BRUTE FORCE" }), "brute-force");
-  assert.equal(previewName({ username: "maya", display_name: "Maya’s Café!" }), "mayas-cafe");
-  assert.equal(previewName({ username: "maya", display_name: "🌸" }), "maya");
-  assert.equal(previewName({ username: "maya", display_name: "" }), "maya");
-  assert.equal(previewName({ username: "x", display_name: "a".repeat(70) }).length, 63);
+test("preview addresses: offered from the blog name, cleaned when typed, and only preview hostnames count", () => {
+  assert.equal(suggestedPreviewName({ username: "bf", display_name: "BRUTE FORCE" }), "bruteforce");
+  assert.equal(suggestedPreviewName({ username: "brb", display_name: "brbtime" }), "brbtime");
+  assert.equal(suggestedPreviewName({ username: "maya", display_name: "Maya’s Café!" }), "mayascafe");
+  assert.equal(suggestedPreviewName({ username: "maya", display_name: "small -- hours" }), "small-hours");
+  assert.equal(suggestedPreviewName({ username: "maya", display_name: "🌸" }), "maya");
+  assert.equal(suggestedPreviewName({ username: "maya", display_name: "" }), "maya");
+  assert.equal(suggestedPreviewName({ username: "x", display_name: "a".repeat(70) }).length, 63);
   const live = { PREVIEW_BASE: "https://{name}.kylemaclachlanphotography.org" };
+  assert.deepEqual(cleanPreviewName(live, "  BrbTime "), ["brbtime", null]);
+  assert.deepEqual(cleanPreviewName(live, "https://brb-time.kylemaclachlanphotography.org/"), ["brb-time", null]);
+  assert.match(cleanPreviewName(live, "brb time")[1], /letters, numbers and hyphens/);
+  assert.match(cleanPreviewName(live, "-brb")[1], /can't start or end with a hyphen/);
+  assert.match(cleanPreviewName(live, "")[1], /Type an address/);
+  assert.match(cleanPreviewName(live, "a".repeat(64))[1], /too long/);
+  assert.deepEqual(cleanPreviewName({ PREVIEW_BASE: "http://{name}.localhost:8129" }, "maya.localhost"), ["maya", null]);
   assert.equal(nameFromHost(live, "brute-force.kylemaclachlanphotography.org"), "brute-force");
   assert.equal(nameFromHost(live, "kylemaclachlanphotography.org"), null);
   assert.equal(nameFromHost(live, "cdn.kylemaclachlanphotography.org"), null);
@@ -647,10 +656,10 @@ test("preview names come from the blog name, and only preview hostnames count", 
   assert.equal(nameFromHost({ PREVIEW_BASE: "http://{name}.localhost:8129" }, "maya.localhost"), "maya");
 });
 
-test("preview sites: turned on in settings, follow renames, one blog per address", async () => {
+test("preview sites: friends pick the address, renames don't move it, one blog per address", async () => {
   const PREVIEW_ENV = () => ({ ...env, SITE_ORIGIN: ORIGIN });
   const visit = (host, path = "/") => previews.fetch(new Request(`https://${host}.kylemaclachlanphotography.org${path}`), PREVIEW_ENV());
-  await archie("/admin/users", { method: "POST", form: { username: "bf", display_name: "BRUTE FORCE", password: "bf-password-123" } });
+  await archie("/admin/users", { method: "POST", form: { username: "bf", display_name: "Loud Band", password: "bf-password-123" } });
   await archie("/admin/users", { method: "POST", form: { username: "other", display_name: "Other", password: "other-password-1" } });
   const bf = browser("22.0.0.1");
   await bf("/login", { method: "POST", form: { username: "bf", password: "bf-password-123" } });
@@ -659,60 +668,64 @@ test("preview sites: turned on in settings, follow renames, one blog per address
   await bf("/api/posts", { method: "POST", body: { title: "Quiet One", date: "2032-01-01", published: 1, fields: { tags: ["soft"] } } });
   await bf("/api/posts", { method: "POST", body: { title: "Draft Riff", date: "2032-01-03", published: 0 } });
 
-  // Off to start with: settings says what the address would be, and nothing is served there.
+  // Off to start with: settings offers an address from the blog name, and nothing is served there.
   let me = await (await bf("/api/me")).json();
   assert.equal(me.preview, null);
-  assert.equal(me.previewWouldBe, "https://brute-force.kylemaclachlanphotography.org");
-  assert.equal((await visit("brute-force")).status, 404);
+  assert.equal(me.previewName, "loudband");
+  assert.equal(me.previewDomain, ".kylemaclachlanphotography.org");
+  assert.equal((await visit("loudband")).status, 404);
 
-  // On.
-  me = await (await bf("/api/preview", { method: "PUT", body: { on: true } })).json();
-  assert.equal(me.preview, "https://brute-force.kylemaclachlanphotography.org");
-  const home = await visit("brute-force");
+  // On, at an address they pick (typed loosely).
+  me = await (await bf("/api/preview", { method: "PUT", body: { on: true, name: " Loud-Band " } })).json();
+  assert.equal(me.preview, "https://loud-band.kylemaclachlanphotography.org");
+  assert.equal(me.previewName, "loud-band");
+  const home = await visit("loud-band");
   assert.equal(home.status, 200);
   assert.equal(home.headers.get("x-robots-tag"), "noindex");
   const page = await home.text();
-  assert.match(page, /<title>BRUTE FORCE<\/title>/);
-  assert.match(page, /<h1><a href="\/">BRUTE FORCE<\/a><\/h1>/);
+  assert.match(page, /<title>Loud Band<\/title>/);
+  assert.match(page, /<h1><a href="\/">Loud Band<\/a><\/h1>/);
   assert.match(page, /<a href="\/first-riff">First Riff<\/a>/);
   assert.match(page, /<a class="kmp-tag" href="\/\?tag=loud"/);
   assert.match(page, /href="https:\/\/kylemaclachlanphotography\.org\/app\/home\.css"/);
   assert.ok(!page.includes("Draft Riff"));
   assert.ok(!page.includes("log in")); // no front page sidebar, no other blogs
   assert.ok(!page.includes("Other"));
-  const one = await (await visit("brute-force", "/quiet-one")).text();
-  assert.match(one, /<title>Quiet One · BRUTE FORCE<\/title>/);
-  assert.match(one, /<a href="\/">← all of BRUTE FORCE<\/a>/);
-  const tagged = await (await visit("brute-force", "/?tag=soft")).text();
+  const one = await (await visit("loud-band", "/quiet-one")).text();
+  assert.match(one, /<title>Quiet One · Loud Band<\/title>/);
+  assert.match(one, /<a href="\/">← all of Loud Band<\/a>/);
+  const tagged = await (await visit("loud-band", "/?tag=soft")).text();
   assert.ok(tagged.includes("Quiet One") && !tagged.includes("First Riff"));
-  assert.equal((await visit("brute-force", "/draft-riff")).status, 404);
-  assert.equal((await visit("brute-force", "/a/b")).status, 404);
-  assert.match(await (await visit("brute-force", "/robots.txt")).text(), /Disallow: \//);
+  assert.equal((await visit("loud-band", "/draft-riff")).status, 404);
+  assert.equal((await visit("loud-band", "/a/b")).status, 404);
+  assert.match(await (await visit("loud-band", "/robots.txt")).text(), /Disallow: \//);
 
-  // Another blog can't take the same address, by turning on or by renaming.
+  // Renaming the blog leaves the address alone.
+  await bf("/api/me", { method: "PUT", body: { display_name: "Quiet Band", site_url: "", post_url_pattern: "" } });
+  me = await (await bf("/api/me")).json();
+  assert.equal(me.preview, "https://loud-band.kylemaclachlanphotography.org");
+  assert.match(await (await visit("loud-band")).text(), /<title>Quiet Band<\/title>/);
+
+  // Bad addresses, taken ones and official-looking ones are refused.
   const o = browser("22.0.0.2");
   await o("/login", { method: "POST", form: { username: "other", password: "other-password-1" } });
-  await o("/api/me", { method: "PUT", body: { display_name: "Brute Force", site_url: "", post_url_pattern: "" } });
-  const clash = await o("/api/preview", { method: "PUT", body: { on: true } });
-  assert.equal(clash.status, 400);
-  assert.match((await clash.json()).error, /already uses brute-force\.kylemaclachlanphotography\.org/);
-  await o("/api/me", { method: "PUT", body: { display_name: "Other", site_url: "", post_url_pattern: "" } });
-  assert.equal((await o("/api/preview", { method: "PUT", body: { on: true } })).status, 200);
-  const steal = await o("/api/me", { method: "PUT", body: { display_name: "brute force!", site_url: "", post_url_pattern: "" } });
-  assert.equal(steal.status, 400);
-  assert.match((await steal.json()).error, /turn your preview site off first/);
-  assert.equal((await (await o("/api/me")).json()).display_name, "Other"); // the rename didn't happen
+  for (const [name, why] of [["loud-band", /already uses loud-band\.kylemaclachlanphotography\.org/], ["cdn", /can't be a preview address/], ["two words", /letters, numbers and hyphens/]]) {
+    const res = await o("/api/preview", { method: "PUT", body: { on: true, name } });
+    assert.equal(res.status, 400, name);
+    assert.match((await res.json()).error, why, name);
+  }
+  assert.equal((await (await o("/api/me")).json()).preview, null);
+  // Without a name, it takes the offered one.
+  assert.equal((await (await o("/api/preview", { method: "PUT", body: { on: true } })).json()).preview, "https://other.kylemaclachlanphotography.org");
 
-  // Names that would look official can't be used.
-  await o("/api/preview", { method: "PUT", body: { on: false } });
-  await o("/api/me", { method: "PUT", body: { display_name: "CDN", site_url: "", post_url_pattern: "" } });
-  assert.equal((await o("/api/preview", { method: "PUT", body: { on: true } })).status, 400);
-
-  // Renaming moves the preview; the old address stops working.
-  me = await (await bf("/api/me", { method: "PUT", body: { display_name: "brbtime", site_url: "", post_url_pattern: "" } })).json();
+  // Changing the address moves it; the old one stops working and is free again.
+  me = await (await bf("/api/preview", { method: "PUT", body: { on: true, name: "brbtime" } })).json();
   assert.equal(me.preview, "https://brbtime.kylemaclachlanphotography.org");
-  assert.equal((await visit("brute-force")).status, 404);
-  assert.match(await (await visit("brbtime")).text(), /<title>brbtime<\/title>/);
+  assert.equal((await visit("loud-band")).status, 404);
+  assert.match(await (await visit("brbtime")).text(), /<title>Quiet Band<\/title>/);
+  assert.equal((await o("/api/preview", { method: "PUT", body: { on: true, name: "loud-band" } })).status, 200);
+  // Turning on again without a name keeps the address it has.
+  assert.equal((await (await bf("/api/preview", { method: "PUT", body: { on: true } })).json()).preview, "https://brbtime.kylemaclachlanphotography.org");
 
   // A disabled blog's preview goes away with it; turning it off frees the address.
   const bfId = (await env.DB.prepare("SELECT id FROM users WHERE username = 'bf'").first()).id;

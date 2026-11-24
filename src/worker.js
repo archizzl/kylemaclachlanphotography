@@ -29,7 +29,7 @@ import { appBilling, costReport, loadCostData, nextRenewal, RATES, reportFor, st
 import { measuredByMonth, syncR2Usage, syncStatus } from "./r2usage.js";
 import { cleanFieldDefs, cleanPostFields, growChoices, listQuery, parseJson } from "./fields.js";
 import { adminLoginPage, adminPage, dashboardPage, loginPage, simplePage } from "./pages.js";
-import { previewName, previewProblem, previewUrl } from "./preview.js";
+import { cleanPreviewName, previewDomain, previewProblem, previewUrl, suggestedPreviewName } from "./preview.js";
 import { html, json, now, readJson, redirect } from "./util.js";
 
 const PUBLIC_CACHE_SECONDS = 60;
@@ -345,38 +345,41 @@ async function api(path, method, request, env, user, url) {
       fields: parseJson(user.fields_json, []),
       look: user.look_json ? parseJson(user.look_json, null) : null,
       cdn: `${base}/${user.username}/`,
-      // The preview site's address if it's on, and what it would be if it's off.
+      // The preview site's address if it's on; its name (or the one it's offered); what follows the name.
       preview: previewUrl(env, user.preview_host),
-      previewWouldBe: previewUrl(env, previewName(user)),
+      previewName: user.preview_host || suggestedPreviewName(user),
+      previewDomain: previewDomain(env),
       feeds: { rss: `${siteOrigin(env, url)}/${user.username}/feed.xml`, json: `${siteOrigin(env, url)}/${user.username}/feed.json` },
     });
   }
   if (path === "/api/me" && method === "PUT") {
     const [s, problem] = cleanSettings(await readJson(request));
     if (problem) return json({ error: problem }, 400);
-    // A preview site follows the blog's name, so a rename moves it (if the new address is free).
-    let preview = user.preview_host;
-    if (preview) {
-      preview = previewName({ ...user, display_name: s.display_name });
-      const taken = await previewProblem(env, user.id, preview);
-      if (taken) return json({ error: `${taken.replace(/ Try a different blog name\.$/, "")} Pick a different blog name, or turn your preview site off first.` }, 400);
-    }
-    await env.DB.prepare("UPDATE users SET display_name = ?, site_url = ?, post_url_pattern = ?, preview_host = ? WHERE id = ?")
-      .bind(s.display_name, s.site_url, s.post_url_pattern, preview, user.id)
+    await env.DB.prepare("UPDATE users SET display_name = ?, site_url = ?, post_url_pattern = ? WHERE id = ?")
+      .bind(s.display_name, s.site_url, s.post_url_pattern, user.id)
       .run();
-    const updated = { ...user, ...s };
-    return json({ ok: true, ...s, preview: previewUrl(env, preview), previewWouldBe: previewUrl(env, previewName(updated)) });
+    return json({ ok: true, ...s });
   }
-  // The preview site at <blog name>.kylemaclachlanphotography.org: { "on": true } or { "on": false }.
+  // The preview site at <name>.kylemaclachlanphotography.org. { "on": true, "name": "maya" } turns it
+  // on or changes its address (without "name", it keeps its address or takes the offered one);
+  // { "on": false } turns it off.
   if (path === "/api/preview" && method === "PUT") {
-    const on = Boolean((await readJson(request))?.on);
-    const name = on ? previewName(user) : null;
-    if (on) {
-      const problem = await previewProblem(env, user.id, name);
+    const body = (await readJson(request)) || {};
+    let name = null;
+    if (body.on) {
+      const [clean, bad] = cleanPreviewName(env, body.name ?? (user.preview_host || suggestedPreviewName(user)));
+      if (bad) return json({ error: bad }, 400);
+      const problem = await previewProblem(env, user.id, clean);
       if (problem) return json({ error: problem }, 400);
+      name = clean;
     }
-    await env.DB.prepare("UPDATE users SET preview_host = ? WHERE id = ?").bind(name, user.id).run();
-    return json({ preview: previewUrl(env, name), previewWouldBe: previewUrl(env, previewName(user)) });
+    try {
+      await env.DB.prepare("UPDATE users SET preview_host = ? WHERE id = ?").bind(name, user.id).run();
+    } catch (err) {
+      if (/UNIQUE/i.test(String(err))) return json({ error: "Another blog just took that address. Try a different one." }, 400);
+      throw err;
+    }
+    return json({ preview: previewUrl(env, name), previewName: name || suggestedPreviewName(user), previewDomain: previewDomain(env) });
   }
   // What this blog costs, by month and all time.
   if (path === "/api/usage" && method === "GET") {

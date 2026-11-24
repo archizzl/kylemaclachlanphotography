@@ -75,16 +75,17 @@ The `PUT` replaces all three, so send all of them.
 
 ### Preview site (optional)
 
-Before they have their own domain, the blog can be its own website at `<blog name>.kylemaclachlanphotography.org`: their feed, posts at `/<slug>`, `?tag=` feeds and photos, in the look saved in the style tab (`PUT /api/look`). Search engines don't list it.
+Before they have their own domain, the blog can be its own website at `<name>.kylemaclachlanphotography.org`, with a name they pick: their feed, posts at `/<slug>`, `?tag=` feeds and photos, in the look saved in the style tab (`PUT /api/look`). Search engines don't list it.
 
 ```bash
 curl -s -X PUT https://kylemaclachlanphotography.org/api/preview -H "Authorization: Bearer $KEY" \
-  -H "content-type: application/json" -d '{"on":true}'
-# {"preview":"https://mayas-notebook.kylemaclachlanphotography.org", ...}
+  -H "content-type: application/json" -d '{"on":true,"name":"mayasnotebook"}'
+# {"preview":"https://mayasnotebook.kylemaclachlanphotography.org","previewName":"mayasnotebook",...}
 ```
 
-- `GET /api/me` has `preview` (its address, or `null` when off) and `previewWouldBe` (the address it would get).
-- The address comes from `display_name`, so set the blog's name first. Renaming the blog moves the preview to the new name. A rename that would take another blog's preview address is refused with a 400.
+- `name` is letters, numbers and hyphens, up to 63. Ask the person what they want; if you leave it out, it keeps its current address, or takes `previewName` from `GET /api/me` (their blog name squashed together).
+- `GET /api/me` has `preview` (its address, or `null` when off), `previewName` (its name, or the one it's offered) and `previewDomain` (what follows the name).
+- Sending a different `name` while it's on moves it, and the old address stops working. A name another blog has, or a reserved one, is refused with a 400. Renaming the blog doesn't change it.
 - `{"on":false}` turns it off. Only turn it on if the person asked for it.
 
 ## 4. Post fields: their own tags, numbers and details

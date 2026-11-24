@@ -242,3 +242,8 @@ td.actions details .hint { font-size: 13px; margin: 8px 0 2px; max-width: 360px;
 
 /* the hidden attribute always wins over display rules above (e.g. on buttons) */
 [hidden] { display: none !important; }
+
+/* settings → preview site: the address box with the domain after it */
+.addr { display: flex; align-items: baseline; gap: 2px; }
+.addr input { flex: 1 1 auto; min-width: 0; }
+.addr .muted { white-space: nowrap; }

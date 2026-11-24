@@ -1,8 +1,8 @@
 /*
  * Preview sites: a blog can turn on <name>.kylemaclachlanphotography.org, which shows just that
  * blog as its own website (its posts, tags and photos, in the look saved in the style tab), so a
- * friend can try it out before buying a domain. <name> comes from the blog's name and follows it
- * when the blog is renamed.
+ * friend can try it out before buying a domain. The friend picks <name>; it starts as their blog's
+ * name squashed together, and renaming the blog doesn't change it.
  *
  * The blog Worker (worker.js) turns previews on and off. A separate Worker, kmp-previews
  * (wrangler.previews.jsonc, `export default` below), serves them from a wildcard route and only
@@ -27,19 +27,36 @@ const RESERVED = new Set(
 );
 const LABEL = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
 
-// The subdomain for a blog: its name made address-safe ("BRUTE FORCE" -> "brute-force"), or its
-// username if the name has no letters or numbers.
-export function previewName(user) {
+// The address a blog is offered before it picks one: its name squashed together ("BRUTE FORCE" ->
+// "bruteforce", "Maya's Café" -> "mayascafe"), or its username if the name has no letters or numbers.
+export function suggestedPreviewName(user) {
   const fromName = String(user.display_name || "")
     .normalize("NFKD")
-    .replace(/[̀-ͯ]/g, "")
+    .replace(/[\u0300-\u036f]/g, "")
     .toLowerCase()
-    .replace(/['’]/g, "")
-    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/[^a-z0-9-]+/g, "")
+    .replace(/-{2,}/g, "-")
     .replace(/^-+/, "")
     .slice(0, 63)
     .replace(/-+$/, "");
   return fromName || user.username;
+}
+
+// What a friend typed as their address. Takes "BruteForce", or a pasted
+// "https://bruteforce.kylemaclachlanphotography.org/". Returns [name, problem].
+export function cleanPreviewName(env, input) {
+  let name = String(input ?? "").trim().toLowerCase().replace(/^https?:\/\//, "").replace(/\/.*$/, "");
+  const suffix = previewDomain(env).split(":")[0];
+  if (name.endsWith(suffix)) name = name.slice(0, -suffix.length);
+  if (!name) return [null, "Type an address for your preview site."];
+  if (name.length > 63) return [null, "That address is too long (63 characters at most)."];
+  if (!LABEL.test(name)) return [null, "Addresses can only have letters, numbers and hyphens, and can't start or end with a hyphen."];
+  return [name, null];
+}
+
+// The part after the name: ".kylemaclachlanphotography.org" (".localhost:8129" locally).
+export function previewDomain(env) {
+  return previewBase(env).replace(/^https?:\/\/\{name\}/, "");
 }
 
 export function previewUrl(env, name) {
@@ -60,10 +77,10 @@ export function nameFromHost(env, hostname) {
 // Checks a name can be used by this blog. Returns a problem, or "".
 export async function previewProblem(env, userId, name) {
   if (!LABEL.test(name) || RESERVED.has(name) || Object.hasOwn(SITES, name)) {
-    return `${name} can't be a preview address. Try a different blog name.`;
+    return `${name} can't be a preview address. Try a different one.`;
   }
   const taken = await env.DB.prepare("SELECT 1 FROM users WHERE preview_host = ? AND id != ?").bind(name, userId).first();
-  return taken ? `Another blog's preview already uses ${previewUrl(env, name).replace(/^https?:\/\//, "")}. Try a different blog name.` : "";
+  return taken ? `Another blog's preview already uses ${previewUrl(env, name).replace(/^https?:\/\//, "")}. Try a different one.` : "";
 }
 
 // ---- the kmp-previews Worker ----
@@ -96,7 +113,7 @@ async function serve(request, env) {
   if (Object.hasOwn(SITES, name)) return site(env, url, SITES[name]);
 
   const user = await env.DB.prepare("SELECT username FROM users WHERE preview_host = ? AND disabled = 0").bind(name).first();
-  if (!user) return page("no preview here", `there's no preview site at this address. if you renamed your blog, its preview moved to the new name: see settings in your dashboard.`, 404);
+  if (!user) return page("no preview here", `there's no preview site at this address. if you changed your preview's address, it's at the new one: see settings in your dashboard.`, 404);
 
   const path = url.pathname.replace(/\/+$/, "") || "/";
   const slug = path === "/" ? "" : SLUG.exec(path)?.[1];

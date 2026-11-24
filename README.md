@@ -29,7 +29,7 @@ One Cloudflare Worker (`blog-cdn`) on the Reaction Future Institute account, plu
   - **files**: drag-and-drop upload, copy link and delete. Photos also get **describe** (alt text and an optional caption) and **embed code** (a live embed, or a plain `<img>` for sites that block scripts). You can also import a `.md` or `.txt` file as a draft post.
   - **settings**:
     - blog name, site address, and an optional post address pattern (used for feed links);
-    - **preview site**: turn on `<blog name>.kylemaclachlanphotography.org` (see "preview sites" below);
+    - **preview site**: pick an address and turn on `<name>.kylemaclachlanphotography.org` (see "preview sites" below);
     - **post fields** and **agent keys** (both below);
     - change password.
 - **Post fields** (`src/fields.js`): each blog designs its own, as many as they like (no caps on fields, tags or tags per post).
@@ -122,10 +122,10 @@ Later deploys: `npm run deploy`.
 
 ## preview sites
 
-A friend can try their blog out as its own website before buying a domain. In **settings → preview site** they press **turn on preview site**, and it's up straight away at `<blog name>.kylemaclachlanphotography.org`: just their blog (feed, single posts at `/<slug>`, `?tag=` feeds, their photos), in the look saved in their style tab.
+A friend can try their blog out as its own website before buying a domain. In **settings → preview site** they pick an address and press **turn on preview site**, and it's up straight away at `<name>.kylemaclachlanphotography.org`: just their blog (feed, single posts at `/<slug>`, `?tag=` feeds, their photos), in the look saved in their style tab.
 
-- **The address follows the blog name** (`src/preview.js`, `previewName`): "BRUTE FORCE" is `brute-force.`, with accents and punctuation dropped, and the username if the name has no letters or numbers. Renaming the blog moves the preview, and the old address stops working.
-- **One blog per address.** Turning on, or renaming while on, is refused if another blog's preview has that address, or it's a reserved name like `www`, `cdn`, `api` or `admin` (`RESERVED`). Stored as `users.preview_host` (unique; `NULL` is off). Agents can turn it on with `PUT /api/preview`.
+- **Friends pick the address** (letters, numbers and hyphens; `cleanPreviewName` in `src/preview.js`). The box starts with their blog name squashed together (`suggestedPreviewName`: "BRUTE FORCE" offers `bruteforce`, "Maya's Café" offers `mayascafe`), or their username if the name has no letters or numbers. They can change it later with **change address**, and the old address stops working. Renaming the blog doesn't change it.
+- **One blog per address.** An address is refused if another blog's preview has it, if it's a hand-made site's (`SITES`, below), or if it's a reserved name like `www`, `cdn`, `api` or `admin` (`RESERVED`). Stored as `users.preview_host` (unique; `NULL` is off). Agents use `PUT /api/preview`.
 - **Served by its own Worker**, `kmp-previews` (`wrangler.previews.jsonc`, code in `src/preview.js`), on the route `*.kylemaclachlanphotography.org/*`. It only reads the database, and uses the same page code as `/<username>` (`homePage` with `site`), with its stylesheet and script loaded from the main site. The apex and `www` are the blog Worker's custom domains, which win over the route.
 - Every preview response has `X-Robots-Tag: noindex`, and `/robots.txt` disallows everything. A disabled blog's preview disappears with it. Blog login cookies are host-only, so preview pages can't see anyone's login.
 - **Locally**: run `npm run dev` and `npm run dev:previews` (launch configs `blog-cdn` and `kmp-previews`). Turn a preview on in settings, then open `http://<name>.localhost:8129`. `PREVIEW_BASE` in `.dev.vars` makes the dashboard link there.

@@ -1039,27 +1039,38 @@ function describe(f) {
 
 // ---- settings ----
 
-// Turns the blog's preview site (<blog name>.kylemaclachlanphotography.org) on and off.
+// The blog's preview site (<name>.kylemaclachlanphotography.org): pick its address, turn it on and off.
 function previewSite() {
   const box = $("#preview");
   const bare = u => String(u || "").replace(/^https?:\/\//, "");
+  const addressForm = label => `<form id="previewname" class="row" style="max-width:640px">
+      <label>address <span class="addr"><input name="name" value="${esc(me.previewName)}" autocapitalize="none" spellcheck="false" maxlength="63" required><span class="muted">${esc(me.previewDomain)}</span></span></label>
+      <button type="submit">${label}</button>
+    </form>`;
   box.innerHTML = me.preview
-    ? `<p>your blog is up as its own website at <a href="${esc(me.preview)}" target="_blank" rel="noopener">${esc(bare(me.preview))}</a> ↗, in the look you saved in the <a href="#style">style</a> tab.</p>
-      <p class="muted">it follows your blog name: rename the blog and the address changes with it (the old one stops working). search engines don't list it.</p>
-      <button type="button" data-preview="off">turn off preview site</button>`
-    : `<p>try your blog out as its own website before you buy a domain. it shows your posts and photos in the look you saved in the <a href="#style">style</a> tab, at</p>
-      <p><b>${esc(bare(me.previewWouldBe))}</b></p>
-      <p class="muted">it follows your blog name, so rename the blog first if you want a different address. search engines won't list it.</p>
-      <button type="button" data-preview="on">turn on preview site</button>`;
-  box.querySelector("[data-preview]").onclick = async ev => {
-    const on = ev.target.dataset.preview === "on";
-    ev.target.disabled = true;
+    ? `<p>your blog is up as its own website at <a href="${esc(me.preview)}" target="_blank" rel="noopener">${esc(bare(me.preview))}</a> ↗, in the look you saved in the <a href="#style">style</a> tab. search engines don't list it.</p>
+      ${addressForm("change address")}
+      <p class="muted">if you change the address, the old one stops working.</p>
+      <button type="button" data-off>turn off preview site</button>`
+    : `<p>try your blog out as its own website before you buy a domain. it shows your posts and photos in the look you saved in the <a href="#style">style</a> tab. pick its address:</p>
+      ${addressForm("turn on preview site")}
+      <p class="muted">letters, numbers and hyphens. search engines won't list it.</p>`;
+  const send = async (body, button, done) => {
+    button.disabled = true;
     try {
-      Object.assign(me, await api("preview", { method: "PUT", body: { on } }));
-      toast(on ? "preview site is on" : "preview site is off");
+      Object.assign(me, await api("preview", { method: "PUT", body }));
+      toast(done);
       settingsView();
-    } catch (err) { toast(err.message, true); ev.target.disabled = false; }
+    } catch (err) { toast(err.message, true); button.disabled = false; }
   };
+  box.querySelector("#previewname").onsubmit = ev => {
+    ev.preventDefault();
+    const name = new FormData(ev.target).get("name");
+    if (me.preview && name.trim().toLowerCase() === me.previewName) return toast("that's already its address");
+    send({ on: true, name }, ev.target.querySelector("button"), me.preview ? "address changed" : "preview site is on");
+  };
+  const off = box.querySelector("[data-off]");
+  if (off) off.onclick = () => send({ on: false }, off, "preview site is off");
 }
 
 function settingsView() {
@@ -1067,7 +1078,7 @@ function settingsView() {
     "settings",
     `<h2>about you</h2>
     <form id="about" class="stack">
-      <label>blog name <span class="muted">(shown in the sidebar on the front page and as your feed's title${me.preview ? ", and your preview site's address" : ""})</span> <input name="display_name" value="${esc(me.display_name)}" placeholder="${esc(username)}"></label>
+      <label>blog name <span class="muted">(shown in the sidebar on the front page and as your feed's title)</span> <input name="display_name" value="${esc(me.display_name)}" placeholder="${esc(username)}"></label>
       <label>your site <input name="site_url" value="${esc(me.site_url)}" placeholder="https://you.neocities.org"></label>
       <label>post address pattern <span class="muted">(optional) where each post lives on your site, for feed links. include {slug}.</span>
         <input name="post_url_pattern" value="${esc(me.post_url_pattern)}" placeholder="https://you.neocities.org/blog/{slug}"></label>
