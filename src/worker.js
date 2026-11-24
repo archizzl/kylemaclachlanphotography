@@ -679,11 +679,22 @@ async function publicRoute(username, name, ext, env, url) {
       const { html, markdown_url, ...rest } = full;
       return rest;
     });
-    return json({ user: publicUser(user), posts }, 200, headers);
+    return json({ user: publicUser(user, await publishedTags(env, user.id)), posts }, 200, headers);
   }
   const post = await env.DB.prepare("SELECT * FROM posts WHERE user_id = ? AND slug = ? AND published = 1").bind(user.id, name).first();
   if (!post) return notFound();
-  return json({ user: publicUser(user), post: publicPost(user, post, base) }, 200, headers);
+  return json({ user: publicUser(user, await publishedTags(env, user.id)), post: publicPost(user, post, base) }, 200, headers);
+}
+
+// Every tag on a blog's published posts, lowercased (for publicUser).
+async function publishedTags(env, userId) {
+  const { results } = await env.DB.prepare(
+    `SELECT DISTINCT lower(t.value) AS tag FROM posts p, json_each(p.fields_json) f, json_each(f.value) t
+     WHERE p.user_id = ? AND p.published = 1 AND f.type = 'array'`
+  )
+    .bind(userId)
+    .all();
+  return new Set(results.map(r => r.tag));
 }
 
 async function publicImageRoute(username, name, env) {

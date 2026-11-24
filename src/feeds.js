@@ -21,17 +21,20 @@ export function postLink(user, post, cdnBase) {
 
 const defsOf = user => parseJson(user.fields_json, []);
 
-export function publicUser(user) {
+// `published`: the tags (lowercased) on the blog's published posts. A tags field's list only
+// shares those, in the blog's order, and never its hidden tags: the list can include tags only
+// used on drafts.
+export function publicUser(user, published = new Set()) {
   return {
     username: user.username,
     name: user.display_name || user.username,
     site: user.site_url || null,
     // The blog's post fields, so embeds can label values and build menus in the blog's own order.
-    // An open tag field's list isn't shared: it can include tags only used on drafts. Menus are
-    // built from the published posts instead.
-    fields: defsOf(user).map(({ key, name, kind, choices, open }) =>
-      open ? { key, name, kind, open } : choices ? { key, name, kind, choices } : { key, name, kind }
-    ),
+    fields: defsOf(user).map(({ key, name, kind, choices, hidden }) => {
+      if (kind !== "tags") return { key, name, kind };
+      const secret = new Set((hidden || []).map(h => h.toLowerCase()));
+      return { key, name, kind, choices: (choices || []).filter(c => published.has(c.toLowerCase()) && !secret.has(c.toLowerCase())) };
+    }),
   };
 }
 

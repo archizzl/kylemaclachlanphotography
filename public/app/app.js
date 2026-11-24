@@ -484,10 +484,8 @@ function fieldsEditor() {
             <label>kind <select data-k="kind">${Object.entries(kinds).map(([k, l]) => `<option value="${k}"${d.kind === k ? " selected" : ""}>${l}</option>`).join("")}</select></label>
             <span class="buttons"><button type="button" data-move="-1" title="move up"${i ? "" : " disabled"}>↑</button><button type="button" data-move="1" title="move down"${i < defs.length - 1 ? "" : " disabled"}>↓</button><button type="button" class="danger" data-remove>remove</button></span>
           </div>
-          ${d.kind === "tags" ? `<label>tags, separated by commas <input data-k="choices" value="${esc((d.choices || []).join(", "))}" placeholder="tender, restless, hopeful, giddy"></label>
-          <label class="check"><input type="checkbox" data-k="open"${d.open ? " checked" : ""}> let me type new tags while writing</label>
-          ${(d.choices || []).length ? `<div class="hidetags"><p class="muted">hidden from lists:</p>
-            <div class="chips">${d.choices.map(c => `<label><input type="checkbox" data-k="hidden" value="${esc(c)}"${(d.hidden || []).some(h => h.toLowerCase() === c.toLowerCase()) ? " checked" : ""}>${esc(c)}</label>`).join("")}</div></div>` : ""}` : ""}
+          ${d.kind === "tags" ? `<label>tags <input data-k="choices" value="${esc((d.choices || []).join(", "))}" placeholder="tender, restless, hopeful, giddy"></label>
+          <label>tags to hide <input data-k="hidden" value="${esc((d.hidden || []).join(", "))}"></label>` : ""}
           ${d.kind === "number" ? `<label class="check"><input type="checkbox" data-k="auto"${d.auto ? " checked" : ""}> number new posts automatically</label>` : ""}
           ${d.key ? `<p class="muted" style="margin:4px 0 0;font-size:14px">key: <code>${esc(d.key)}</code></p>` : ""}
         </div>`
@@ -503,22 +501,15 @@ function fieldsEditor() {
     if (!row || !k) return;
     const d = defs[row.dataset.i];
     if (k === "auto") d.auto = ev.target.checked;
-    else if (k === "open") d.open = ev.target.checked;
-    else if (k === "hidden") {
-      if (ev.type !== "change") return;
-      const v = ev.target.value;
-      d.hidden = (d.hidden || []).filter(h => h.toLowerCase() !== v.toLowerCase());
-      if (ev.target.checked) d.hidden.push(v);
-    } else if (k === "choices") d.choices = ev.target.value.split(",").map(s => s.trim()).filter(Boolean);
+    else if (k === "choices" || k === "hidden") d[k] = ev.target.value.split(",").map(s => s.trim()).filter(Boolean);
     else d[k] = ev.target.value;
-    // Redraw when the kind changes, or when the tags are done being typed (for the hide checkboxes).
-    if ((k === "kind" || k === "choices") && ev.type === "change") draw();
+    if (k === "kind" && ev.type === "change") draw();
   };
   box.onclick = async ev => {
     const t = ev.target;
     const row = t.closest(".fielddef");
     const i = row ? Number(row.dataset.i) : -1;
-    if (t.dataset.add !== undefined) { defs.push({ name: "", kind: "tags", choices: [] }); draw(); box.querySelector(".fielddef:last-of-type input")?.focus(); }
+    if (t.dataset.add !== undefined) { defs.push({ name: "", kind: "tags", choices: [], open: true }); draw(); box.querySelector(".fielddef:last-of-type input")?.focus(); }
     if (t.dataset.remove !== undefined) {
       if (defs[i].key && !confirm(`Remove "${defs[i].name}"? Posts stop showing it.`)) return;
       defs.splice(i, 1); draw();

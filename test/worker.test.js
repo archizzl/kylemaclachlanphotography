@@ -302,7 +302,7 @@ test("post fields: set up, auto-numbered, filtered, sorted and shown in feeds", 
   const b = await post("second", { emotion: ["restless", "hopeful"] }, "2026-02-01");
   const c = await post("third", { emotion: ["tender", "bogus"], no: 10 }, "2026-03-01");
   assert.deepEqual([a.fields.no, b.fields.no, c.fields.no], [1, 2, 10]); // counts up unless set
-  assert.deepEqual(c.fields.emotion, ["tender"]);
+  assert.deepEqual(c.fields.emotion, ["tender", "bogus"]); // every tags field takes new tags
   const d = await post("fourth", {}, "2026-04-01");
   assert.equal(d.fields.no, 11);
 
@@ -314,7 +314,7 @@ test("post fields: set up, auto-numbered, filtered, sorted and shown in feeds", 
   assert.deepEqual(await list("sort=-no"), ["fourth", "third", "second", "first"]);
 
   const data = await (await june("/june/posts.json?x")).json();
-  assert.deepEqual(data.user.fields[0], { key: "emotion", name: "emotion", kind: "tags", choices: ["tender", "restless", "hopeful"] });
+  assert.deepEqual(data.user.fields[0], { key: "emotion", name: "emotion", kind: "tags", choices: ["tender", "restless", "hopeful", "bogus"] });
   assert.deepEqual(data.posts.find(p => p.title === "first").fields, { emotion: ["tender"], no: 1, written_at: "the kitchen" });
   assert.match(await (await june("/june/feed.xml?x")).text(), /<category>restless<\/category>/);
 
@@ -527,7 +527,11 @@ test("open tags grow as posts are written, and the brief list has every post wit
   assert.equal(brief.posts.length, 60);
   assert.ok(!("html" in brief.posts[0]));
   assert.deepEqual(Object.keys(brief.posts[0]).sort(), ["date", "fields", "slug", "title", "updated", "url"]);
-  assert.deepEqual(brief.user.fields[0], { key: "tags", name: "tags", kind: "tags", open: true }); // no tag list
+  // The tag list is public in the blog's order, but only tags on published posts.
+  assert.deepEqual(brief.user.fields[0], { key: "tags", name: "tags", kind: "tags", choices: ["work", "nyc", "bluegrass"] });
+  await a("/api/posts", { method: "POST", body: { title: "draft only", published: 0, fields: { tags: ["unannounced"] } } });
+  assert.ok((await (await a("/api/me")).json()).fields[0].choices.includes("unannounced"));
+  assert.deepEqual((await (await a("/archietest/posts.json?brief=1&d")).json()).user.fields[0].choices, ["work", "nyc", "bluegrass"]);
   const page2 = await (await a("/archietest/posts.json?brief=1&limit=25&offset=50&o")).json();
   assert.equal(page2.posts.length, 10);
   const tagged = await (await a("/archietest/posts.json?brief=1&limit=1000&filter=tags:nyc&filter=tags:bluegrass&t")).json();
@@ -779,7 +783,7 @@ test("hidden tags: their posts stay out of lists and feeds unless the tag is ask
   const saved = await (
     await h("/api/fields", { method: "PUT", body: { fields: [{ name: "tags", kind: "tags", open: true, choices: ["Secret", "nyc"], hidden: ["secret", "not-a-tag"] }] } })
   ).json();
-  assert.deepEqual(saved.fields[0].hidden, ["Secret"]);
+  assert.deepEqual(saved.fields[0].hidden, ["Secret", "not-a-tag"]);
   await h("/api/posts", { method: "POST", body: { title: "Part One", date: "2033-01-01", published: 1, fields: { tags: ["secret"] } } });
   await h("/api/posts", { method: "POST", body: { title: "Part Two", date: "2033-01-02", published: 1, fields: { tags: ["nyc", "Secret"] } } });
   await h("/api/posts", { method: "POST", body: { title: "Out Loud", date: "2033-01-03", published: 1, fields: { tags: ["nyc"] } } });

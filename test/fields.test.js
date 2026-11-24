@@ -34,14 +34,13 @@ test("field definitions are checked", () => {
   assert.ok(cleanFieldDefs("nope")[1]);
   assert.ok(cleanFieldDefs([{ name: "", kind: "text" }])[1]);
   assert.ok(cleanFieldDefs([{ name: "x", kind: "photo" }])[1]);
-  assert.ok(cleanFieldDefs([{ name: "x", kind: "tags", choices: [] }])[1]);
   // No cap on how many fields a blog has.
   assert.equal(cleanFieldDefs(Array.from({ length: 40 }, (_, i) => ({ name: `f${i}`, kind: "text" })))[1], null);
 });
 
 test("a post's values only keep what the blog has set up", () => {
   const out = cleanPostFields(DEFS, { emotion: ["TENDER", "furious", "hopeful"], no: "7", written_at: "  the 14\nbus stop ", other: "x" });
-  assert.deepEqual(out, { emotion: ["tender", "hopeful"], no: 7, written_at: "the 14 bus stop" });
+  assert.deepEqual(out, { emotion: ["tender", "furious", "hopeful"], no: 7, written_at: "the 14 bus stop" }); // every tags field takes new tags
   assert.deepEqual(cleanPostFields(DEFS, { emotion: [], no: "", written_at: "" }), {});
   assert.deepEqual(cleanPostFields(DEFS, { no: "seven" }), {});
 });
@@ -56,12 +55,15 @@ test("filters and sorts only use known fields", () => {
   assert.equal(listQuery(DEFS, new URLSearchParams("sort=x') --")).order, "p.date DESC, p.id DESC");
 });
 
-test("open tag fields take any tag and learn new ones", () => {
-  const [defs, problem] = cleanFieldDefs([{ name: "tags", kind: "tags", open: true, choices: "" }]);
+test("tag fields take any tag and learn new ones; hidden tags are a comma list", () => {
+  // Every tags field is open, whatever was sent, and can start with no tags.
+  const [defs, problem] = cleanFieldDefs([{ name: "tags", kind: "tags", open: false, choices: "" }]);
   assert.equal(problem, null);
   assert.deepEqual(defs[0], { key: "tags", name: "tags", kind: "tags", choices: [], open: true });
-  // A closed field still needs choices.
-  assert.ok(cleanFieldDefs([{ name: "tags", kind: "tags", choices: "" }])[1]);
+  // "tags to hide": typed like the tags, kept even if no post uses them yet; known tags keep their spelling.
+  const [tiers] = cleanFieldDefs([{ name: "Quiz tier", kind: "tags", choices: "1, 2, 3, Secret", hidden: " 2, 3, secret, 2, later " }]);
+  assert.deepEqual(tiers[0].hidden, ["2", "3", "Secret", "later"]);
+  assert.equal(cleanFieldDefs([{ name: "x", kind: "tags", choices: "a", hidden: "" }])[0][0].hidden, undefined);
 
   const withNyc = [{ ...defs[0], choices: ["nyc"] }];
   const values = cleanPostFields(withNyc, { tags: ["NYC", "bluegrass", " bluegrass ", "", "x".repeat(60), "y".repeat(150)] });

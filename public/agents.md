@@ -90,11 +90,11 @@ curl -s -X PUT https://kylemaclachlanphotography.org/api/preview -H "Authorizati
 
 ## 4. Post fields: their own tags, numbers and details
 
-Each blog designs its own fields. There are up to **10**, of three kinds:
+Each blog designs its own fields, as many as it likes, of three kinds:
 
 | kind | value on a post | use for | options |
 |---|---|---|---|
-| `tags` | a list of strings, chosen from `choices` | categories, emotions, series, topics | `choices`: up to 50 tags, in the order menus and groups show them. `open: true` accepts any tag (up to 20 per post); new tags join `choices`, and the list isn't made public. Use it for free-form tagging. |
+| `tags` | a list of strings | categories, emotions, series, topics | `choices`: the tags, in the order menus and groups show them. Any new tag on a post joins `choices` when it's saved. `hidden`: tags to keep out of lists (below). |
 | `number` | a number | issue or entry numbers, ratings, years | `auto: true`: new posts without a number get the highest so far + 1 |
 | `text` | one line, up to 200 characters | location, mood, weather, a soundtrack | none |
 
@@ -109,8 +109,9 @@ curl -s -X PUT https://kylemaclachlanphotography.org/api/fields -H "Authorizatio
 
 - The response gives each field a **`key`**: `emotion`, `no`, `written_at`. Keys are made from the name when the field is created, and never change. Use them in post values and embed codes.
 - To rename a field, or change its choices, send the whole list again with each existing field's `key` included. A field you leave out is removed, and its values stop showing.
-- On a normal tags field, a tag that isn't in `choices` is dropped when a post is saved, so set up every tag before importing. For a blog that tags freely, use `"open": true`.
-- **Hidden tags**: `"hidden": ["secret"]` on a tags field (each one must be in `choices`). Posts with a hidden tag are left out of the blog's page, the front page, `posts.json`, feeds and embeds, unless the list asks for that tag (`?tag=secret` on the blog's page, `?filter=tags:secret`, `data-filter="tags:secret"`). Each post's own page still works. It's not private. Only hide tags the person asked you to.
+- Every tags field accepts any tag, so you don't need to set up every tag before importing. Do set `choices` in the order the person wants menus and groups to show them.
+- The public `posts.json` shares a field's `choices` only for tags on published posts, without hidden ones.
+- **Hidden tags**: `"hidden": ["secret"]` on a tags field, or a comma-separated string like `"2, 3"`. Posts with a hidden tag are left out of the blog's page, the front page, `posts.json`, feeds and embeds, unless the list asks for that tag (`?tag=secret` on the blog's page, `?filter=tags:secret`, `data-filter="tags:secret"`). Each post's own page still works. It's not private. Only hide tags the person asked you to.
 - Map their existing structure onto this. For example, WordPress categories and tags become `tags` fields, and a "#12" in titles becomes a `number` field, with the number taken out of the title.
 
 ## 5. Photos and files

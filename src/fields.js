@@ -4,9 +4,10 @@
 // A definition: { key, name, kind: "tags" | "number" | "text", choices?: [..], open?: bool, hidden?: [..], auto?: bool }
 //   key     the stable name used in embed codes (data-group="emotion") and stored values; set when
 //           the field is made, from its name, and never changed after (renaming only changes `name`)
-//   choices tags only: the allowed tags, in the order menus and groups show them
-//   open    tags only: any new tag can be typed while writing; it's added to `choices` when saved
-//   hidden  tags only: some of `choices`. Posts with one of these tags are left out of every list of
+//   choices tags only: the blog's tags, in the order menus and groups show them. Any new tag can be
+//           typed while writing; it's added here when the post is saved.
+//   open    tags only: always true (every tags field takes new tags; migration 0011)
+//   hidden  tags only: tags whose posts are left out of every list of
 //           posts (the front page, the blog's page and preview site, posts.json, feeds, embeds)
 //           unless the list asks for that tag (?tag=secret, ?filter=tags:secret). Each post's own
 //           page still works. It's a way to keep a series out of the way, not to make it private.
@@ -68,15 +69,14 @@ export function cleanFieldDefs(input, previous = []) {
         const t = oneLine(c, NAME_MAX);
         if (t && !choices.some(x => x.toLowerCase() === t.toLowerCase())) choices.push(t);
       }
-      const open = Boolean(raw.open);
-      if (!choices.length && !open) return [null, `Give "${name}" at least one tag to choose from, or let new tags be typed while writing.`];
       def.choices = choices;
-      if (open) def.open = true;
-      // Hidden tags must be among the choices; they take the choice's spelling.
+      def.open = true;
+      // Hidden tags: a list or "2, 3". A tag that's already a choice takes its spelling.
       const hidden = [];
-      for (const h of Array.isArray(raw.hidden) ? raw.hidden : []) {
-        const c = choices.find(x => x.toLowerCase() === oneLine(h, NAME_MAX).toLowerCase());
-        if (c && !hidden.includes(c)) hidden.push(c);
+      for (const h of Array.isArray(raw.hidden) ? raw.hidden : String(raw.hidden || "").split(",")) {
+        const t = oneLine(h, NAME_MAX);
+        const c = choices.find(x => x.toLowerCase() === t.toLowerCase()) || t;
+        if (c && !hidden.some(x => x.toLowerCase() === c.toLowerCase())) hidden.push(c);
       }
       if (hidden.length) def.hidden = hidden;
     }
@@ -94,17 +94,12 @@ export function cleanPostFields(defs, input) {
     const v = src[d.key];
     if (d.kind === "tags") {
       const picked = (Array.isArray(v) ? v : String(v ?? "").split(",")).map(x => oneLine(x, NAME_MAX)).filter(Boolean);
-      let valid;
-      if (d.open) {
-        // Any tag goes; a known one keeps its usual spelling. Order is as typed.
-        valid = [];
-        for (const p of picked) {
-          const known = d.choices.find(c => c.toLowerCase() === p.toLowerCase());
-          const tag = known || p;
-          if (!valid.some(x => x.toLowerCase() === tag.toLowerCase())) valid.push(tag);
-        }
-      } else {
-        valid = d.choices.filter(c => picked.some(p => p.toLowerCase() === c.toLowerCase()));
+      // Any tag goes; a known one keeps its usual spelling. Order is as typed.
+      const valid = [];
+      for (const p of picked) {
+        const known = (d.choices || []).find(c => c.toLowerCase() === p.toLowerCase());
+        const tag = known || p;
+        if (!valid.some(x => x.toLowerCase() === tag.toLowerCase())) valid.push(tag);
       }
       if (valid.length) out[d.key] = valid;
     } else if (d.kind === "number") {
@@ -181,11 +176,12 @@ export function hiddenClause(reveal = []) {
 export function growChoices(defs, values) {
   let changed = false;
   const next = defs.map(d => {
-    if (d.kind !== "tags" || !d.open || !values[d.key]) return d;
-    const add = values[d.key].filter(t => !d.choices.some(c => c.toLowerCase() === t.toLowerCase()));
+    if (d.kind !== "tags" || !values[d.key]) return d;
+    const choices = d.choices || [];
+    const add = values[d.key].filter(t => !choices.some(c => c.toLowerCase() === t.toLowerCase()));
     if (!add.length) return d;
     changed = true;
-    return { ...d, choices: [...d.choices, ...add] };
+    return { ...d, choices: [...choices, ...add] };
   });
   return changed ? next : null;
 }

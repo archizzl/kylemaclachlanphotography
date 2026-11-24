@@ -131,8 +131,6 @@ dialog textarea { width: 100%; min-height: 110px; font-size: 13px; }
 .fielddef { border: 1px solid #ddd; border-radius: 3px; padding: 6px 12px 10px; margin: 10px 0; }
 .fielddef .row { align-items: flex-end; }
 .fielddef select { font: inherit; font-size: 17px; }
-.hidetags { margin-top: 10px; }
-.hidetags p { margin: 4px 0; font-size: 15px; }
 label.check { display: flex; gap: 8px; align-items: center; margin-top: 8px; font-size: 17px; }
 label.check input { width: auto; margin: 0; }
 

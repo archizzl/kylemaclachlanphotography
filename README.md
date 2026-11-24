@@ -42,13 +42,14 @@ One Cloudflare Worker (`blog-cdn`) on the Reaction Future Institute account, plu
     - **post fields** and **agent keys** (both below);
     - change password.
 - **Post fields** (`src/fields.js`): each blog designs its own, as many as they like (no caps on fields, tags or tags per post).
-  - Kinds: `tags` (picked from a list, e.g. emotions; or "open", so any tag can be typed while writing), `number` (can count up by itself), and `text` (e.g. where it was written).
+  - Kinds: `tags` (e.g. emotions; any new tag can be typed while writing and joins the field's list, which sets the order of menus and groups), `number` (can count up by itself), and `text` (e.g. where it was written). Every tags field takes new tags; there's no setting for it (migration `0011` turned it on for older fields).
+  - The public JSON shares a tags field's list only for tags on published posts, minus hidden ones, so tags used only on drafts stay unseen.
   - Values show under each post's title in embeds and on the front page, and tags become RSS categories.
   - Lists can use them: `?filter=<key>:<value>` and `?sort=<key>` in the JSON API, and `data-filter`, `data-sort`, `data-group` and `data-menu` in embeds.
-  - **Hidden tags**: in settings, any tag can be ticked "hide posts with these tags from lists" (the field's `hidden`).
+  - **Hidden tags**: each tags field has "tags to hide", a comma-separated list like the tags themselves (the field's `hidden`). For example, field "Quiz tier" with tags `1, 2, 3` and tags to hide `2, 3`.
     - Those posts stay out of every list: the front page, the blog's page and preview site, `posts.json` (and so embeds and archizzl.com's list), and the RSS and JSON feeds. Embed tag buttons and groups only come from posts in the list, so they don't offer the tag either.
     - They show when the list asks for that tag: `/<user>?tag=secret`, `?filter=tags:secret`, `data-filter="tags:secret"`. Asking for a different tag doesn't show them. Each post's own page and `<slug>.json` always work.
-    - It's for keeping a series out of the way, not for privacy. The dashboard marks those posts "hidden from lists". The SQL is `hiddenClause` in `src/fields.js`.
+    - It's for keeping a series out of the way, not for privacy. The dashboard marks those posts "hidden". The SQL is `hiddenClause` in `src/fields.js`.
 - **Costs** (`src/costs.js`): settings shows each friend what their blog costs, month by month and all time. Archie sees an all-time column at `/admin`.
   - Storage is billed like R2: the average GB stored over the month, at `$0.015` per GB-month, plus `$4.50` per million uploads. The rates are in `RATES`, checked 2026-11-22.
   - Cloudflare's free 10 GB-months and 1M uploads each month are shared across the whole account. A blog only pays its share of anything over that.
