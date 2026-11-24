@@ -724,3 +724,36 @@ test("preview sites: turned on in settings, follow renames, one blog per address
   assert.equal(me.preview, null);
   assert.equal((await visit("brbtime")).status, 404);
 });
+
+test("bruteforce.: the hand-made photo site, newest photos first", async () => {
+  const visit = (host, path = "/") => previews.fetch(new Request(`https://${host}.kylemaclachlanphotography.org${path}`), { ...env, SITE_ORIGIN: ORIGIN });
+  await archie("/admin/users", { method: "POST", form: { username: "bruteforce", display_name: "BRUTE FORCE", password: "bruteforce-pass-1" } });
+  const id = (await env.DB.prepare("SELECT id FROM users WHERE username = 'bruteforce'").first()).id;
+  const add = (name, at, extra = "") =>
+    env.DB.prepare(`INSERT INTO files (user_id, key, name, content_type, size, created_at${extra ? ", deleted_at" : ""}) VALUES (?, ?, ?, ?, 1, ?${extra ? ", ?" : ""})`)
+      .bind(id, `bruteforce/${name}`, name, name.endsWith(".pdf") ? "application/pdf" : "image/jpeg", at, ...(extra ? [extra] : []))
+      .run();
+  await add("old.jpg", "2032-01-01T00:00:00Z");
+  await add("new.jpg", "2032-01-03T00:00:00Z");
+  await add("mid.jpg", "2032-01-02T00:00:00Z");
+  await add("gone.jpg", "2032-01-04T00:00:00Z", "2032-01-05T00:00:00Z");
+  await add("zine.pdf", "2032-01-04T00:00:00Z");
+
+  const res = await visit("bruteforce");
+  assert.equal(res.status, 200);
+  assert.equal(res.headers.get("x-robots-tag"), "noindex");
+  const page = await res.text();
+  assert.match(page, /<title>BRUTE FORCE<\/title>/);
+  assert.match(page, /#E7BBD8/);
+  assert.match(page, new RegExp(`<img class="left" src="${CDN}/bruteforce/new\\.jpg" alt=""><img class="right" src="${CDN}/bruteforce/mid\\.jpg"`));
+  const row = [...page.matchAll(/data-i="\d+"[^>]*><img src="[^"]*\/([^"/]+)"/g)].map(m => m[1]);
+  assert.deepEqual(row, ["new.jpg", "mid.jpg", "old.jpg"]); // no deleted files, no PDFs
+  assert.equal((await visit("bruteforce", "/anything")).status, 404);
+
+  // No blog's preview can take the address.
+  const b = browser("22.0.0.9");
+  await b("/login", { method: "POST", form: { username: "bruteforce", password: "bruteforce-pass-1" } });
+  await b("/api/me", { method: "PUT", body: { display_name: "bruteforce", site_url: "", post_url_pattern: "" } });
+  assert.equal((await b("/api/preview", { method: "PUT", body: { on: true } })).status, 400);
+  assert.equal((await visit("bruteforce")).status, 200);
+});

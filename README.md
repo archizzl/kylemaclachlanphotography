@@ -134,6 +134,17 @@ A friend can try their blog out as its own website before buying a domain. In **
   - DNS: a proxied wildcard record, `*` → `AAAA 100::`. Specific records (`cdn`, the Worker custom domains) still win over it. Universal SSL already covers `*.kylemaclachlanphotography.org`.
   - A Workers route `cdn.kylemaclachlanphotography.org/*` with **no Worker**, so photos never pass through `kmp-previews`. (If it were missing, the Worker passes `cdn.` requests straight through anyway.)
 
+## hand-made sites
+
+Some subdomains are a site made by hand for one blog, instead of a preview. They're listed in `SITES` in `src/preview.js`, served by the same `kmp-previews` Worker, and no blog's preview can take their address.
+
+- **bruteforce.kylemaclachlanphotography.org** (`src/sites/bruteforce.js`): the `bruteforce` blog's photos from its file store, newest first, with no posts.
+  - Two photos side by side, with every photo in a row along the bottom.
+  - Clicking the right photo (or →) goes one back, to older photos. Clicking the left photo (or ←) goes one forward. Clicking a photo in the row puts it on the left. It wraps around at either end.
+  - Colors: background `#E7BBD8`, title `#B42D58`, title highlight (its shadow) and all other text `#596157`. The title font is Eater from Google Fonts.
+  - New uploads show up within a minute. Deleting a file in the dashboard takes it off.
+  - Locally: launch config `bruteforce-site` (port 8130) shows `http://bruteforce.localhost:8130` with photos from the live `cdn.`. It needs a local `bruteforce` user with file rows that match the live keys.
+
 ## going live (first time, for reference)
 
 ```bash
